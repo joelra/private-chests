@@ -172,18 +172,15 @@ public class BlockBreakHandler {
     }
 
     /**
-     * Check if the owner of a lock is banned and protection should be disabled.
+     * Returns true when the owner is banned AND the config says protection should
+     * be disabled for banned owners.  Works for offline players.
      */
     private static boolean isOwnerBanned(ServerPlayer player, LockRecord lock) {
-        var server = player.level().getServer();
-        var ownerPlayer = server.getPlayerList().getPlayer(lock.getOwnerUuid());
-        if (ownerPlayer != null) {
-            boolean isBanned = server.getPlayerList().getBans().isBanned(ownerPlayer.getGameProfile());
-            if (isBanned && PrivateChests.getConfig().isDisableProtectionIfOwnerBanned()) {
-                return true;
-            }
+        if (!PrivateChests.getConfig().isDisableProtectionIfOwnerBanned()) {
+            return false;
         }
-
-        return false;
+        var server = player.level().getServer();
+        var ownerProfile = new com.mojang.authlib.GameProfile(lock.getOwnerUuid(), lock.getOwnerName());
+        return server.getPlayerList().getBans().isBanned(ownerProfile);
     }
 }

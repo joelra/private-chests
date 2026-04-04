@@ -2,12 +2,15 @@ package com.simpleforapanda.privatechests.command;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.simpleforapanda.privatechests.PrivateChests;
 import com.simpleforapanda.privatechests.config.ModConfig;
 import com.simpleforapanda.privatechests.model.LockRecord;
+import com.simpleforapanda.privatechests.service.AccessControlService;
 import com.simpleforapanda.privatechests.state.LockState;
 import com.simpleforapanda.privatechests.util.ContainerUtils;
+import com.simpleforapanda.privatechests.util.SignUtils;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
@@ -16,9 +19,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.permissions.Permissions;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
@@ -27,6 +30,7 @@ import java.util.Set;
 
 /**
  * Admin commands for managing private chests.
+ * Requires the configured {@code adminPermissionLevel} (default 3).
  */
 public class PrivateChestsCommand {
 
@@ -34,10 +38,15 @@ public class PrivateChestsCommand {
         // Register main command: /private_chests
         dispatcher.register(
             Commands.literal("private_chests")
-                .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
+                .requires(source -> source.hasPermission(PrivateChests.getConfig().getAdminPermissionLevel()))
                 .then(Commands.literal("unlock")
                     .then(Commands.argument("pos", BlockPosArgument.blockPos())
-                        .executes(PrivateChestsCommand::executeUnlock)
+                        .executes(PrivateChestsCommand::executeUnlockByPos)
+                    )
+                )
+                .then(Commands.literal("unlock_player")
+                    .then(Commands.argument("player", StringArgumentType.word())
+                        .executes(PrivateChestsCommand::executeUnlockByPlayer)
                     )
                 )
                 .then(Commands.literal("list")
@@ -54,12 +63,18 @@ public class PrivateChestsCommand {
                         .executes(PrivateChestsCommand::executeInfo)
                     )
                 )
+                .then(Commands.literal("limits")
+                    .executes(PrivateChestsCommand::executeLimits)
+                )
+                .then(Commands.literal("cleanup")
+                    .executes(PrivateChestsCommand::executeCleanup)
+                )
         );
 
         // Register shorter alias: /pchests
         dispatcher.register(
             Commands.literal("pchests")
-                .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
+                .requires(source -> source.hasPermission(PrivateChests.getConfig().getAdminPermissionLevel()))
                 .redirect(dispatcher.getRoot().getChild("private_chests"))
         );
     }
@@ -67,7 +82,7 @@ public class PrivateChestsCommand {
     /**
      * Execute /private_chests unlock <pos>
      */
-    private static int executeUnlock(CommandContext<CommandSourceStack> ctx) {
+    private static int executeUnlockByPos(CommandContext<CommandSourceStack> ctx) {
         try {
             BlockPos pos = BlockPosArgument.getBlockPos(ctx, "pos");
             CommandSourceStack source = ctx.getSource();
@@ -105,6 +120,112 @@ public class PrivateChestsCommand {
             ctx.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
             return 0;
         }
+    }
+
+    /**
+     * Execute /private_chests unlock_player <playerName>
+     * Removes all locks owned by the named player.
+     */
+    private static int executeUnlockByPlayer(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        MinecraftServer server = source.getServer();
+        LockState lockState = LockState.get(server);
+        String playerName = StringArgumentType.getString(ctx, "player");
+
+        // Find all locks whose owner name matches (case-insensitive)
+        List<LockRecord> toRemove = lockState.getAllLocks().stream()
+            .filter(r -> r.getOwnerName().equalsIgnoreCase(playerName))
+            .toList();
+
+        if (toRemove.isEmpty()) {
+            source.sendFailure(Component.literal("No locks found for player '" + playerName + "'."));
+            return 0;
+        }
+
+        for (LockRecord lock : toRemove) {
+            lockState.removeLock(lock.getContainerPositions().iterator().next());
+        }
+
+        int removed = toRemove.size();
+        source.sendSuccess(() -> Component.literal(
+            "Removed " + removed + " lock(s) owned by '" + playerName + "'."
+        ), true);
+        PrivateChests.LOGGER.info("Admin {} removed {} lock(s) for player '{}'",
+            source.getTextName(), removed, playerName);
+
+        return removed;
+    }
+
+    /**
+     * Execute /private_chests limits
+     * Lists all players with locks, showing their count vs the configured limit.
+     */
+    private static int executeLimits(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        MinecraftServer server = source.getServer();
+        LockState lockState = LockState.get(server);
+        int maxLocks = PrivateChests.getConfig().getMaxLocksPerPlayer();
+
+        Collection<LockRecord> allLocks = lockState.getAllLocks();
+        if (allLocks.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("No active locks."), false);
+            return 0;
+        }
+
+        // Group counts by owner
+        java.util.Map<java.util.UUID, long[]> countByOwner = new java.util.LinkedHashMap<>();
+        java.util.Map<java.util.UUID, String> nameByOwner = new java.util.LinkedHashMap<>();
+        for (LockRecord lock : allLocks) {
+            countByOwner.computeIfAbsent(lock.getOwnerUuid(), k -> new long[]{0})[0]++;
+            nameByOwner.put(lock.getOwnerUuid(), AccessControlService.getOwnerName(server, lock));
+        }
+
+        String limitLabel = maxLocks > 0 ? " (limit: " + maxLocks + ")" : " (no limit)";
+        source.sendSuccess(() -> Component.literal("===== Lock Counts Per Player" + limitLabel + " ====="), false);
+
+        countByOwner.entrySet().stream()
+            .sorted((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]))
+            .forEach(entry -> {
+                String name = nameByOwner.get(entry.getKey());
+                long count = entry.getValue()[0];
+                String line = "  " + name + ": " + count
+                    + (maxLocks > 0 ? " / " + maxLocks : "");
+                source.sendSuccess(() -> Component.literal(line), false);
+            });
+
+        return countByOwner.size();
+    }
+
+    /**
+     * Execute /private_chests cleanup
+     * Removes lock records whose private sign no longer exists in the overworld.
+     * Only locks in currently-loaded chunks are validated.
+     */
+    private static int executeCleanup(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        MinecraftServer server = source.getServer();
+        LockState lockState = LockState.get(server);
+        ServerLevel overworld = server.overworld();
+
+        int[] removedCount = {0};
+        lockState.cleanupDanglingLocks(record -> {
+            BlockPos signPos = record.getSignPos();
+            // Only validate if the chunk is currently loaded
+            if (!overworld.isLoaded(signPos)) {
+                return true; // assume valid if not loaded
+            }
+            boolean valid = SignUtils.isValidPrivateSign(overworld, signPos, record.getContainerPositions());
+            if (!valid) removedCount[0]++;
+            return valid;
+        });
+
+        int removed = removedCount[0];
+        source.sendSuccess(() -> Component.literal(
+            "Cleanup complete. Removed " + removed + " dangling lock record(s)."
+        ), true);
+        PrivateChests.LOGGER.info("Admin {} ran cleanup, removed {} dangling lock(s)", source.getTextName(), removed);
+
+        return removed;
     }
 
     /**
@@ -178,10 +299,10 @@ public class PrivateChestsCommand {
 
             LockRecord lock = lockOpt.get();
 
-            // Build info message
+            // Build info message – prefer live name when owner is online
             String containerType = ContainerUtils.getContainerTypeName(level, containerGroup);
             String position = ContainerUtils.positionToString(ContainerUtils.getPrimaryPosition(lock.getContainerPositions()));
-            String ownerName = lock.getOwnerName();
+            String ownerName = AccessControlService.getOwnerName(server, lock);
             Set<String> allowedUsers = lock.getAllowedUsers();
 
             source.sendSuccess(() -> Component.literal("===== Lock Information ====="), false);
@@ -246,13 +367,11 @@ public class PrivateChestsCommand {
 
     /**
      * Send lock information to the command source.
+     * Prefers the live player name when the owner is currently online.
      */
     private static void sendLockInfo(CommandSourceStack source, LockRecord lock, MinecraftServer server) {
-        // Use cached owner name from lock record
-        String ownerName = lock.getOwnerName();
+        String ownerName = AccessControlService.getOwnerName(server, lock);
 
-        // Get container type (need to get level from one of the container positions)
-        BlockPos containerPos = lock.getContainerPositions().iterator().next();
         ServerLevel level = source.getLevel();
         String containerType = ContainerUtils.getContainerTypeName(level, lock.getContainerPositions());
         String position = ContainerUtils.positionToString(ContainerUtils.getPrimaryPosition(lock.getContainerPositions()));

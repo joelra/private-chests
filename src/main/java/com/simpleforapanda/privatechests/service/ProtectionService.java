@@ -12,9 +12,11 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Optional;
+import java.util.Set;
 
 /**
- * Service for checking if a block is protected (either a locked container or its private sign).
+ * Service for checking if a block is protected from destruction.
+ * Returns true for locked containers and their private signs.
  */
 public class ProtectionService {
 
@@ -35,7 +37,7 @@ public class ProtectionService {
 
         // Check if this is a locked container
         if (ContainerUtils.isLockableContainer(state)) {
-            return isContainerProtected(lockState, pos, server);
+            return isContainerProtected(level, lockState, pos, server);
         }
 
         // Check if this is a private sign
@@ -48,66 +50,64 @@ public class ProtectionService {
 
     /**
      * Check if a container is protected.
+     * Iterates the full container group so that both halves of a double chest
+     * are protected even if only one half is registered in the lock record.
      */
-    private static boolean isContainerProtected(LockState lockState, BlockPos pos, MinecraftServer server) {
-        Optional<LockRecord> lockOpt = lockState.getLock(pos);
+    private static boolean isContainerProtected(Level level, LockState lockState, BlockPos pos, MinecraftServer server) {
+        Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, pos);
+
+        Optional<LockRecord> lockOpt = Optional.empty();
+        for (BlockPos groupPos : containerGroup) {
+            lockOpt = lockState.getLock(groupPos);
+            if (lockOpt.isPresent()) {
+                break;
+            }
+        }
+
         if (lockOpt.isEmpty()) {
             return false;
         }
 
-        LockRecord lock = lockOpt.get();
-
-        // Check if owner is banned
-        if (isOwnerBanned(server, lock)) {
-            return false; // Not protected if owner is banned
-        }
-
-        return true;
+        return !isOwnerBanned(server, lockOpt.get());
     }
 
     /**
      * Check if a sign is a protected private sign.
+     * Iterates the full container group of the attached block.
      */
     private static boolean isSignProtected(Level level, LockState lockState, BlockPos signPos, MinecraftServer server) {
-        // Check what block the sign is attached to
         Optional<BlockPos> attachedPos = SignUtils.getAttachedBlock(level, signPos);
         if (attachedPos.isEmpty()) {
             return false;
         }
 
-        // Check if there's a lock on the attached container
-        Optional<LockRecord> lockOpt = lockState.getLock(attachedPos.get());
-        if (lockOpt.isEmpty()) {
-            return false;
-        }
+        Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, attachedPos.get());
 
-        LockRecord lock = lockOpt.get();
+        for (BlockPos groupPos : containerGroup) {
+            Optional<LockRecord> lockOpt = lockState.getLock(groupPos);
+            if (lockOpt.isPresent()) {
+                LockRecord lock = lockOpt.get();
 
-        // Check if this is the private sign for this lock
-        if (!lock.getSignPos().equals(signPos)) {
-            return false;
-        }
+                if (!lock.getSignPos().equals(signPos)) {
+                    continue;
+                }
 
-        // Check if owner is banned
-        if (isOwnerBanned(server, lock)) {
-            return false; // Not protected if owner is banned
-        }
-
-        return true;
-    }
-
-    /**
-     * Check if the owner of a lock is banned and protection should be disabled.
-     */
-    private static boolean isOwnerBanned(MinecraftServer server, LockRecord lock) {
-        var player = server.getPlayerList().getPlayer(lock.getOwnerUuid());
-        if (player != null) {
-            boolean isBanned = server.getPlayerList().getBans().isBanned(player.getGameProfile());
-            if (isBanned && PrivateChests.getConfig().isDisableProtectionIfOwnerBanned()) {
-                return true;
+                return !isOwnerBanned(server, lock);
             }
         }
 
         return false;
+    }
+
+    /**
+     * Returns true when the owner is banned AND the config says protection should
+     * be disabled for banned owners.  Works for offline players.
+     */
+    private static boolean isOwnerBanned(MinecraftServer server, LockRecord lock) {
+        if (!PrivateChests.getConfig().isDisableProtectionIfOwnerBanned()) {
+            return false;
+        }
+        var ownerProfile = new com.mojang.authlib.GameProfile(lock.getOwnerUuid(), lock.getOwnerName());
+        return server.getPlayerList().getBans().isBanned(ownerProfile);
     }
 }
