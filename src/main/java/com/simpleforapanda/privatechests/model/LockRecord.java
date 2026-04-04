@@ -3,33 +3,53 @@ package com.simpleforapanda.privatechests.model;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.NbtUtils;
-import net.minecraft.nbt.Tag;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Represents a lock on a container group (chest, double chest, or barrel).
- * Stores ownership, allowed users, and positions of the container and sign.
+ * Stores ownership, access mode, allowed users, and positions of the container and sign.
  */
 public class LockRecord {
     private final UUID ownerUuid;
     private final String ownerName;
     private final BlockPos signPos;
     private final Set<BlockPos> containerPositions;
+    private final AccessMode accessMode;
     private final Set<String> allowedUsers;
-    private final long createdAt;      // Timestamp in milliseconds
-    private final long lastUpdatedAt;  // Timestamp in milliseconds
+    private final long createdAt;
+    private final long lastUpdatedAt;
 
-    public LockRecord(UUID ownerUuid, String ownerName, BlockPos signPos, Set<BlockPos> containerPositions, Set<String> allowedUsers) {
-        this(ownerUuid, ownerName, signPos, containerPositions, allowedUsers, System.currentTimeMillis(), System.currentTimeMillis());
+    public LockRecord(
+        UUID ownerUuid,
+        String ownerName,
+        BlockPos signPos,
+        Set<BlockPos> containerPositions,
+        AccessMode accessMode,
+        Set<String> allowedUsers
+    ) {
+        this(ownerUuid, ownerName, signPos, containerPositions, accessMode, allowedUsers, System.currentTimeMillis(), System.currentTimeMillis());
     }
 
-    public LockRecord(UUID ownerUuid, String ownerName, BlockPos signPos, Set<BlockPos> containerPositions, Set<String> allowedUsers, long createdAt, long lastUpdatedAt) {
+    public LockRecord(
+        UUID ownerUuid,
+        String ownerName,
+        BlockPos signPos,
+        Set<BlockPos> containerPositions,
+        AccessMode accessMode,
+        Set<String> allowedUsers,
+        long createdAt,
+        long lastUpdatedAt
+    ) {
         this.ownerUuid = ownerUuid;
         this.ownerName = ownerName;
         this.signPos = signPos;
         this.containerPositions = new HashSet<>(containerPositions);
+        this.accessMode = accessMode;
         this.allowedUsers = new HashSet<>(allowedUsers);
         this.createdAt = createdAt;
         this.lastUpdatedAt = lastUpdatedAt;
@@ -49,6 +69,10 @@ public class LockRecord {
 
     public Set<BlockPos> getContainerPositions() {
         return Collections.unmodifiableSet(containerPositions);
+    }
+
+    public AccessMode getAccessMode() {
+        return accessMode;
     }
 
     public Set<String> getAllowedUsers() {
@@ -83,30 +107,16 @@ public class LockRecord {
         return false;
     }
 
-    /**
-     * Normalize a username for comparison:
-     * - Case-insensitive
-     * - Trim whitespace
-     * - Strip Floodgate prefix if present
-     * - Treat spaces/underscores equivalently (replace _ with space)
-     */
     private String normalizeUsername(String username, String floodgatePrefix) {
         String normalized = username.trim().toLowerCase();
 
-        // Strip Floodgate prefix if configured and present
         if (floodgatePrefix != null && !floodgatePrefix.isEmpty() && normalized.startsWith(floodgatePrefix.toLowerCase())) {
             normalized = normalized.substring(floodgatePrefix.length());
         }
 
-        // Treat underscores as spaces
-        normalized = normalized.replace('_', ' ');
-
-        return normalized;
+        return normalized.replace('_', ' ');
     }
 
-    /**
-     * Serialize this lock record to NBT.
-     */
     public CompoundTag toNbt() {
         CompoundTag tag = new CompoundTag();
 
@@ -116,6 +126,7 @@ public class LockRecord {
         tag.putInt("SignPosX", signPos.getX());
         tag.putInt("SignPosY", signPos.getY());
         tag.putInt("SignPosZ", signPos.getZ());
+        tag.putString("AccessMode", accessMode.name());
 
         ListTag containerList = new ListTag();
         for (BlockPos pos : containerPositions) {
@@ -141,9 +152,6 @@ public class LockRecord {
         return tag;
     }
 
-    /**
-     * Deserialize a lock record from NBT.
-     */
     public static LockRecord fromNbt(CompoundTag tag) {
         UUID ownerUuid = new UUID(
             tag.getLong("OwnerMost").orElse(0L),
@@ -155,6 +163,16 @@ public class LockRecord {
             tag.getInt("SignPosY").orElse(0),
             tag.getInt("SignPosZ").orElse(0)
         );
+
+        AccessMode accessMode = tag.getString("AccessMode")
+            .map(value -> {
+                try {
+                    return AccessMode.valueOf(value);
+                } catch (IllegalArgumentException ignored) {
+                    return AccessMode.PRIVATE;
+                }
+            })
+            .orElse(AccessMode.PRIVATE);
 
         Set<BlockPos> containerPositions = new HashSet<>();
         tag.getList("Containers").ifPresent(containerList -> {
@@ -172,41 +190,40 @@ public class LockRecord {
         Set<String> allowedUsers = new HashSet<>();
         tag.getList("AllowedUsers").ifPresent(userList -> {
             for (int i = 0; i < userList.size(); i++) {
-                userList.getCompound(i).ifPresent(userTag -> {
-                    userTag.getString("Name").ifPresent(allowedUsers::add);
-                });
+                userList.getCompound(i).ifPresent(userTag -> userTag.getString("Name").ifPresent(allowedUsers::add));
             }
         });
 
-        // Load timestamps (default to 0 for old locks that don't have this data)
         long createdAt = tag.getLong("CreatedAt").orElse(0L);
         long lastUpdatedAt = tag.getLong("LastUpdatedAt").orElse(0L);
 
-        return new LockRecord(ownerUuid, ownerName, signPos, containerPositions, allowedUsers, createdAt, lastUpdatedAt);
+        return new LockRecord(ownerUuid, ownerName, signPos, containerPositions, accessMode, allowedUsers, createdAt, lastUpdatedAt);
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof LockRecord that)) return false;
-        return Objects.equals(ownerUuid, that.ownerUuid) &&
-               Objects.equals(signPos, that.signPos) &&
-               Objects.equals(containerPositions, that.containerPositions) &&
-               Objects.equals(allowedUsers, that.allowedUsers);
+        return Objects.equals(ownerUuid, that.ownerUuid)
+            && Objects.equals(signPos, that.signPos)
+            && Objects.equals(containerPositions, that.containerPositions)
+            && accessMode == that.accessMode
+            && Objects.equals(allowedUsers, that.allowedUsers);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(ownerUuid, signPos, containerPositions, allowedUsers);
+        return Objects.hash(ownerUuid, signPos, containerPositions, accessMode, allowedUsers);
     }
 
     @Override
     public String toString() {
-        return "LockRecord{" +
-               "ownerUuid=" + ownerUuid +
-               ", signPos=" + signPos +
-               ", containerPositions=" + containerPositions +
-               ", allowedUsers=" + allowedUsers +
-               '}';
+        return "LockRecord{"
+            + "ownerUuid=" + ownerUuid
+            + ", signPos=" + signPos
+            + ", containerPositions=" + containerPositions
+            + ", accessMode=" + accessMode
+            + ", allowedUsers=" + allowedUsers
+            + '}';
     }
 }

@@ -6,6 +6,8 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.simpleforapanda.privatechests.PrivateChests;
 import com.simpleforapanda.privatechests.config.ModConfig;
+import com.simpleforapanda.privatechests.model.AccessMode;
+import com.simpleforapanda.privatechests.model.DormantSignRecord;
 import com.simpleforapanda.privatechests.model.LockRecord;
 import com.simpleforapanda.privatechests.service.AccessControlService;
 import com.simpleforapanda.privatechests.state.LockState;
@@ -50,12 +52,30 @@ public class PrivateChestsCommand {
                     )
                 )
                 .then(Commands.literal("list")
-                    .executes(PrivateChestsCommand::executeList)
+                    .executes(ctx -> executeList(ctx, null))
+                    .then(Commands.literal("public")
+                        .executes(ctx -> executeList(ctx, AccessMode.PUBLIC))
+                    )
+                    .then(Commands.literal("private")
+                        .executes(ctx -> executeList(ctx, AccessMode.PRIVATE))
+                    )
                 )
                 .then(Commands.literal("list_in_area")
-                    .executes(ctx -> executeListInArea(ctx, 1)) // Default 2x2 chunks (radius 1)
+                    .executes(ctx -> executeListInArea(ctx, 1, null)) // Default 2x2 chunks (radius 1)
+                    .then(Commands.literal("public")
+                        .executes(ctx -> executeListInArea(ctx, 1, AccessMode.PUBLIC))
+                    )
+                    .then(Commands.literal("private")
+                        .executes(ctx -> executeListInArea(ctx, 1, AccessMode.PRIVATE))
+                    )
                     .then(Commands.argument("radius", IntegerArgumentType.integer(0, 10))
-                        .executes(ctx -> executeListInArea(ctx, IntegerArgumentType.getInteger(ctx, "radius")))
+                        .executes(ctx -> executeListInArea(ctx, IntegerArgumentType.getInteger(ctx, "radius"), null))
+                        .then(Commands.literal("public")
+                            .executes(ctx -> executeListInArea(ctx, IntegerArgumentType.getInteger(ctx, "radius"), AccessMode.PUBLIC))
+                        )
+                        .then(Commands.literal("private")
+                            .executes(ctx -> executeListInArea(ctx, IntegerArgumentType.getInteger(ctx, "radius"), AccessMode.PRIVATE))
+                        )
                     )
                 )
                 .then(Commands.literal("info")
@@ -99,14 +119,14 @@ public class PrivateChestsCommand {
             }
 
             // Check if locked
-            Optional<LockRecord> lockOpt = lockState.getLock(pos);
+            Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
             if (lockOpt.isEmpty()) {
                 source.sendFailure(Component.literal("No lock found at " + ContainerUtils.positionToString(pos)));
                 return 0;
             }
 
             // Remove lock
-            lockState.removeLock(pos);
+            lockState.removeLock(containerGroup.iterator().next());
 
             String containerType = ContainerUtils.getContainerTypeName(level, containerGroup);
             source.sendSuccess(() -> Component.literal(
@@ -198,8 +218,8 @@ public class PrivateChestsCommand {
 
     /**
      * Execute /private_chests cleanup
-     * Removes lock records whose private sign no longer exists in the overworld.
-     * Only locks in currently-loaded chunks are validated.
+     * Removes active lock records and dormant sign records whose protection sign
+     * no longer exists in the overworld. Only currently-loaded chunks are validated.
      */
     private static int executeCleanup(CommandContext<CommandSourceStack> ctx) {
         CommandSourceStack source = ctx.getSource();
@@ -207,23 +227,35 @@ public class PrivateChestsCommand {
         LockState lockState = LockState.get(server);
         ServerLevel overworld = server.overworld();
 
-        int[] removedCount = {0};
+        int[] removedLockCount = {0};
         lockState.cleanupDanglingLocks(record -> {
             BlockPos signPos = record.getSignPos();
             // Only validate if the chunk is currently loaded
             if (!overworld.isLoaded(signPos)) {
                 return true; // assume valid if not loaded
             }
-            boolean valid = SignUtils.isValidPrivateSign(overworld, signPos, record.getContainerPositions());
-            if (!valid) removedCount[0]++;
+            boolean valid = SignUtils.isValidProtectionSign(overworld, signPos, record.getContainerPositions());
+            if (!valid) {
+                removedLockCount[0]++;
+            }
             return valid;
         });
 
-        int removed = removedCount[0];
+        int[] removedDormantCount = {0};
+        lockState.cleanupDanglingDormantSigns(record -> isValidDormantSign(overworld, record, removedDormantCount));
+
+        int removed = removedLockCount[0] + removedDormantCount[0];
         source.sendSuccess(() -> Component.literal(
-            "Cleanup complete. Removed " + removed + " dangling lock record(s)."
+            "Cleanup complete. Removed " + removed + " dangling record(s): "
+                + removedLockCount[0] + " active lock(s), "
+                + removedDormantCount[0] + " dormant sign record(s)."
         ), true);
-        PrivateChests.LOGGER.info("Admin {} ran cleanup, removed {} dangling lock(s)", source.getTextName(), removed);
+        PrivateChests.LOGGER.info(
+            "Admin {} ran cleanup, removed {} dangling lock(s) and {} dormant sign record(s)",
+            source.getTextName(),
+            removedLockCount[0],
+            removedDormantCount[0]
+        );
 
         return removed;
     }
@@ -231,16 +263,18 @@ public class PrivateChestsCommand {
     /**
      * Execute /private_chests list
      */
-    private static int executeList(CommandContext<CommandSourceStack> ctx) {
+    private static int executeList(CommandContext<CommandSourceStack> ctx, AccessMode modeFilter) {
         CommandSourceStack source = ctx.getSource();
         MinecraftServer server = source.getServer();
         LockState lockState = LockState.get(server);
 
-        Collection<LockRecord> locks = lockState.getAllLocks();
+        Collection<LockRecord> locks = modeFilter == null
+            ? lockState.getAllLocks()
+            : lockState.getAllLocks().stream().filter(lock -> lock.getAccessMode() == modeFilter).toList();
         int totalCount = locks.size();
 
         if (totalCount == 0) {
-            source.sendSuccess(() -> Component.literal("No private chests found."), false);
+            source.sendSuccess(() -> Component.literal("No " + describeFilter(modeFilter) + " protected containers found."), false);
             return 0;
         }
 
@@ -248,7 +282,9 @@ public class PrivateChestsCommand {
         int maxEntries = config.getListMaxEntries();
         int previewEntries = config.getListPreviewEntries();
 
-        source.sendSuccess(() -> Component.literal("===== Private Chests (" + totalCount + " total) ====="), false);
+        source.sendSuccess(() -> Component.literal(
+            "===== " + headerPrefix(modeFilter) + "Protected Containers (" + totalCount + " total) ====="
+        ), false);
 
         if (totalCount > maxEntries) {
             // Show abbreviated list
@@ -291,7 +327,7 @@ public class PrivateChestsCommand {
             }
 
             // Check if locked
-            Optional<LockRecord> lockOpt = lockState.getLock(pos);
+            Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
             if (lockOpt.isEmpty()) {
                 source.sendFailure(Component.literal("No lock found at " + ContainerUtils.positionToString(pos)));
                 return 0;
@@ -309,8 +345,11 @@ public class PrivateChestsCommand {
             source.sendSuccess(() -> Component.literal("Container: " + containerType), false);
             source.sendSuccess(() -> Component.literal("Location: " + position), false);
             source.sendSuccess(() -> Component.literal("Owner: " + ownerName), false);
+            source.sendSuccess(() -> Component.literal("Mode: " + lock.getAccessMode().name().toLowerCase()), false);
 
-            if (allowedUsers.isEmpty()) {
+            if (lock.getAccessMode() == AccessMode.PUBLIC) {
+                source.sendSuccess(() -> Component.literal("Allowed Users: everyone"), false);
+            } else if (allowedUsers.isEmpty()) {
                 source.sendSuccess(() -> Component.literal("Allowed Users: (none - owner only)"), false);
             } else {
                 source.sendSuccess(() -> Component.literal("Allowed Users: " + String.join(", ", allowedUsers)), false);
@@ -332,7 +371,7 @@ public class PrivateChestsCommand {
     /**
      * Execute /private_chests list_in_area [radius]
      */
-    private static int executeListInArea(CommandContext<CommandSourceStack> ctx, int chunkRadius) {
+    private static int executeListInArea(CommandContext<CommandSourceStack> ctx, int chunkRadius, AccessMode modeFilter) {
         CommandSourceStack source = ctx.getSource();
 
         // Get source position
@@ -346,16 +385,21 @@ public class PrivateChestsCommand {
         BlockPos centerPos = player.blockPosition();
 
         List<LockRecord> locks = lockState.getLocksInArea(centerPos, chunkRadius);
+        if (modeFilter != null) {
+            locks = locks.stream().filter(lock -> lock.getAccessMode() == modeFilter).toList();
+        }
 
         if (locks.isEmpty()) {
             source.sendSuccess(() -> Component.literal(
-                "No private chests found in " + (chunkRadius * 2) + "x" + (chunkRadius * 2) + " chunks around you."
+                "No " + describeFilter(modeFilter) + " protected containers found in "
+                    + (chunkRadius * 2) + "x" + (chunkRadius * 2) + " chunks around you."
             ), false);
             return 0;
         }
 
+        int filteredCount = locks.size();
         source.sendSuccess(() -> Component.literal(
-            "===== Private Chests in Area (" + locks.size() + " found) ====="
+            "===== " + headerPrefix(modeFilter) + "Protected Containers in Area (" + filteredCount + " found) ====="
         ), false);
 
         for (LockRecord lock : locks) {
@@ -377,8 +421,38 @@ public class PrivateChestsCommand {
         String position = ContainerUtils.positionToString(ContainerUtils.getPrimaryPosition(lock.getContainerPositions()));
 
         source.sendSuccess(() -> Component.literal(
-            "- " + containerType + " at " + position + " | Owner: " + ownerName
+            "- " + containerType + " at " + position + " | Owner: " + ownerName + " | Mode: " + lock.getAccessMode().name().toLowerCase()
         ), false);
+    }
+
+    private static boolean isValidDormantSign(ServerLevel overworld, DormantSignRecord record, int[] removedDormantCount) {
+        BlockPos signPos = record.getSignPos();
+        if (!overworld.isLoaded(signPos)) {
+            return true;
+        }
+
+        boolean valid = SignUtils.isProtectionSign(overworld, signPos)
+            && SignUtils.getAttachedBlock(overworld, signPos)
+                .map(attachedPos -> !ContainerUtils.getContainerGroup(overworld, attachedPos).isEmpty())
+                .orElse(false);
+
+        if (!valid) {
+            removedDormantCount[0]++;
+        }
+
+        return valid;
+    }
+
+    private static String describeFilter(AccessMode modeFilter) {
+        return modeFilter == null ? "" : modeFilter.name().toLowerCase() + " ";
+    }
+
+    private static String headerPrefix(AccessMode modeFilter) {
+        if (modeFilter == null) {
+            return "";
+        }
+        String value = modeFilter.name().toLowerCase();
+        return Character.toUpperCase(value.charAt(0)) + value.substring(1) + " ";
     }
 
     /**
