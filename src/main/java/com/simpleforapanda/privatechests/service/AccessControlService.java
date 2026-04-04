@@ -11,8 +11,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
-import net.minecraft.server.players.NameAndId;
-import net.minecraft.server.players.UserBanList;
 import net.minecraft.world.level.Level;
 
 import java.util.Optional;
@@ -108,7 +106,7 @@ public class AccessControlService {
         // Check if the owner UUID is banned
         var player = server.getPlayerList().getPlayer(lock.getOwnerUuid());
         if (player != null) {
-            return server.getPlayerList().getBans().isBanned(new NameAndId(player.getGameProfile()));
+            return server.getPlayerList().getBans().isBanned(player.getGameProfile());
         }
         // If player is not online, we can't easily check ban status, so assume not banned
         return false;

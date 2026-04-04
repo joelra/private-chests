@@ -8,7 +8,6 @@ import com.simpleforapanda.privatechests.util.SignUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -103,7 +102,7 @@ public class ProtectionService {
     private static boolean isOwnerBanned(MinecraftServer server, LockRecord lock) {
         var player = server.getPlayerList().getPlayer(lock.getOwnerUuid());
         if (player != null) {
-            boolean isBanned = server.getPlayerList().getBans().isBanned(new NameAndId(player.getGameProfile()));
+            boolean isBanned = server.getPlayerList().getBans().isBanned(player.getGameProfile());
             if (isBanned && PrivateChests.getConfig().isDisableProtectionIfOwnerBanned()) {
                 return true;
             }

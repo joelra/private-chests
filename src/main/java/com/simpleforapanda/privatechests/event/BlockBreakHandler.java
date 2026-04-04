@@ -11,7 +11,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -179,7 +178,7 @@ public class BlockBreakHandler {
         var server = player.level().getServer();
         var ownerPlayer = server.getPlayerList().getPlayer(lock.getOwnerUuid());
         if (ownerPlayer != null) {
-            boolean isBanned = server.getPlayerList().getBans().isBanned(new NameAndId(player.getGameProfile()));
+            boolean isBanned = server.getPlayerList().getBans().isBanned(player.getGameProfile());
             if (isBanned && PrivateChests.getConfig().isDisableProtectionIfOwnerBanned()) {
                 return true;
             }
