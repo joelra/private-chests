@@ -1,5 +1,6 @@
 package com.simpleforapanda.privatechests.state;
 
+import com.simpleforapanda.privatechests.PrivateChests;
 import com.simpleforapanda.privatechests.model.LockRecord;
 import com.mojang.serialization.Codec;
 import net.minecraft.core.BlockPos;
@@ -7,11 +8,12 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
-import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraft.world.level.storage.SavedDataStorage;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -70,7 +72,7 @@ public class LockState extends SavedData {
     };
 
     private static final SavedDataType<LockState> TYPE = new SavedDataType<>(
-        FILE_NAME,
+        Identifier.fromNamespaceAndPath(PrivateChests.MOD_ID, FILE_NAME),
         LockState::new,
         CODEC,
         null   // DataFixTypes
@@ -80,7 +82,7 @@ public class LockState extends SavedData {
      * Get the LockState instance for the server.
      */
     public static LockState get(MinecraftServer server) {
-        DimensionDataStorage storage = server.overworld().getDataStorage();
+        SavedDataStorage storage = server.overworld().getDataStorage();
         return storage.computeIfAbsent(TYPE);
     }
 

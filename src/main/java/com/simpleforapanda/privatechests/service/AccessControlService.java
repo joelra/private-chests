@@ -11,6 +11,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.Level;
 
 import java.util.Optional;
@@ -61,11 +62,8 @@ public class AccessControlService {
         }
 
         // Check if owner is banned
-        if (isOwnerBanned(server, lock)) {
-            ModConfig config = PrivateChests.getConfig();
-            if (config.isDisableProtectionIfOwnerBanned()) {
-                return AccessResult.allow();
-            }
+        if (shouldDisableProtectionForBannedOwner(server, lock)) {
+            return AccessResult.allow();
         }
 
         // Check admin bypass
@@ -102,14 +100,14 @@ public class AccessControlService {
     /**
      * Check if the owner of a lock is banned.
      */
-    private static boolean isOwnerBanned(MinecraftServer server, LockRecord lock) {
-        // Check if the owner UUID is banned
-        var player = server.getPlayerList().getPlayer(lock.getOwnerUuid());
-        if (player != null) {
-            return server.getPlayerList().getBans().isBanned(player.getGameProfile());
-        }
-        // If player is not online, we can't easily check ban status, so assume not banned
-        return false;
+    public static boolean isOwnerBanned(MinecraftServer server, LockRecord lock) {
+        return server.getPlayerList()
+            .getBans()
+            .isBanned(new NameAndId(lock.getOwnerUuid(), lock.getOwnerName()));
+    }
+
+    public static boolean shouldDisableProtectionForBannedOwner(MinecraftServer server, LockRecord lock) {
+        return PrivateChests.getConfig().isDisableProtectionIfOwnerBanned() && isOwnerBanned(server, lock);
     }
 
     /**

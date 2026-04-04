@@ -58,7 +58,7 @@ public class ProtectionService {
         LockRecord lock = lockOpt.get();
 
         // Check if owner is banned
-        if (isOwnerBanned(server, lock)) {
+        if (AccessControlService.shouldDisableProtectionForBannedOwner(server, lock)) {
             return false; // Not protected if owner is banned
         }
 
@@ -89,25 +89,10 @@ public class ProtectionService {
         }
 
         // Check if owner is banned
-        if (isOwnerBanned(server, lock)) {
+        if (AccessControlService.shouldDisableProtectionForBannedOwner(server, lock)) {
             return false; // Not protected if owner is banned
         }
 
         return true;
-    }
-
-    /**
-     * Check if the owner of a lock is banned and protection should be disabled.
-     */
-    private static boolean isOwnerBanned(MinecraftServer server, LockRecord lock) {
-        var player = server.getPlayerList().getPlayer(lock.getOwnerUuid());
-        if (player != null) {
-            boolean isBanned = server.getPlayerList().getBans().isBanned(player.getGameProfile());
-            if (isBanned && PrivateChests.getConfig().isDisableProtectionIfOwnerBanned()) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

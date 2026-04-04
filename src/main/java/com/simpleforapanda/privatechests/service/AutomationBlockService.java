@@ -1,6 +1,5 @@
 package com.simpleforapanda.privatechests.service;
 
-import com.simpleforapanda.privatechests.PrivateChests;
 import com.simpleforapanda.privatechests.model.LockRecord;
 import com.simpleforapanda.privatechests.state.LockState;
 import com.simpleforapanda.privatechests.util.ContainerUtils;
@@ -44,21 +43,8 @@ public class AutomationBlockService {
         LockRecord lock = lockOpt.get();
 
         // Check if owner is banned
-        return !isOwnerBanned(server, lock); // Allow automation if owner is banned (configurable)
+        return !AccessControlService.shouldDisableProtectionForBannedOwner(server, lock);
 
         // Container is locked, block automation
-    }
-
-    /**
-     * Check if the owner of a lock is banned and protection should be disabled.
-     */
-    private static boolean isOwnerBanned(MinecraftServer server, LockRecord lock) {
-        var player = server.getPlayerList().getPlayer(lock.getOwnerUuid());
-        if (player != null) {
-            boolean isBanned = server.getPlayerList().getBans().isBanned(player.getGameProfile());
-            return isBanned && PrivateChests.getConfig().isDisableProtectionIfOwnerBanned();
-        }
-
-        return false;
     }
 }
