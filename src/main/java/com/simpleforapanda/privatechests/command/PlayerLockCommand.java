@@ -217,9 +217,9 @@ public class PlayerLockCommand {
                 return 0;
             }
 
-            // Enforce per-player limit for the new owner (admins are exempt)
+            // Enforce per-player limit for the new owner (the target is exempt if they are an admin)
             int maxLocks = PrivateChests.getConfig().getMaxLocksPerPlayer();
-            if (maxLocks > 0 && !AccessControlService.isAdmin(callerPlayer)) {
+            if (maxLocks > 0 && !AccessControlService.isAdmin(targetPlayer)) {
                 int targetCurrentLocks = lockState.countLocksForPlayer(targetPlayer.getUUID());
                 if (targetCurrentLocks >= maxLocks) {
                     source.sendFailure(Component.literal(
