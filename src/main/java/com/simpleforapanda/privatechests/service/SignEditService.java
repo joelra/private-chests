@@ -1,8 +1,9 @@
 package com.simpleforapanda.privatechests.service;
 
 import com.simpleforapanda.privatechests.PrivateChests;
+import com.simpleforapanda.privatechests.model.AccessMode;
+import com.simpleforapanda.privatechests.model.DormantSignRecord;
 import com.simpleforapanda.privatechests.model.LockRecord;
-import com.simpleforapanda.privatechests.service.AccessControlService;
 import com.simpleforapanda.privatechests.state.LockState;
 import com.simpleforapanda.privatechests.util.ContainerUtils;
 import com.simpleforapanda.privatechests.util.SignUtils;
@@ -14,77 +15,156 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 /**
- * Service for handling sign editing and lock creation/updates.
+ * Service for handling sign editing and protection creation/updates.
  */
 public class SignEditService {
-
-    /**
-     * Handle a sign edit event with new text lines.
-     * Returns true if the edit is allowed, false to cancel it.
-     *
-     * @param player The player editing the sign
-     * @param signPos The position of the sign
-     * @param signEntity The sign block entity
-     * @param newLines The new text for the side being edited
-     * @param isFrontText True if editing front side, false if editing back side
-     */
-    public static boolean handleSignEdit(ServerPlayer player, BlockPos signPos, SignBlockEntity signEntity,
-                                        java.util.List<net.minecraft.server.network.FilteredText> newLines,
-                                        boolean isFrontText) {
+    public static boolean handleSignEdit(
+        ServerPlayer player,
+        BlockPos signPos,
+        SignBlockEntity signEntity,
+        java.util.List<net.minecraft.server.network.FilteredText> newLines,
+        boolean isFrontText
+    ) {
         ServerLevel serverLevel = player.level();
-
         LockState lockState = LockState.get(serverLevel.getServer());
         BlockState signState = serverLevel.getBlockState(signPos);
 
-        // Only process wall signs
         if (!SignUtils.isWallSign(signState)) {
             return true;
         }
 
-        // Check what block the sign is attached to
         Optional<BlockPos> attachedPos = SignUtils.getAttachedBlock(serverLevel, signPos);
         if (attachedPos.isEmpty()) {
             return true;
         }
 
-        // Check if attached to a lockable container
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(serverLevel, attachedPos.get());
         if (containerGroup.isEmpty()) {
-            return true; // Not attached to a container
+            return true;
         }
 
-        // Check if [private] exists on EITHER side after this edit
-        // The edited side uses newLines, the other side uses existing text from signEntity
-        boolean editedSideHasPrivate = SignUtils.containsPrivateMarker(newLines);
-        boolean otherSideHasPrivate = SignUtils.containsPrivateMarker(signEntity, !isFrontText);
-        boolean isPrivateSign = editedSideHasPrivate || otherSideHasPrivate;
-
-        // Check if ANY part of the container group has an existing lock
-        // This prevents the double chest exploit where Player B extends Player A's locked chest
-        Optional<LockRecord> existingLock = Optional.empty();
-        for (BlockPos pos : containerGroup) {
-            existingLock = lockState.getLock(pos);
-            if (existingLock.isPresent()) {
-                break;
-            }
+        Optional<AccessMode> editedMode = SignUtils.getAccessMode(newLines);
+        Optional<AccessMode> otherMode = SignUtils.getAccessMode(signEntity, !isFrontText);
+        if (editedMode.isPresent() && otherMode.isPresent() && editedMode.get() != otherMode.get()) {
+            player.sendSystemMessage(Component.literal(
+                "A sign cannot mix [private] and [public] markers across its two sides."
+            ));
+            return false;
         }
+
+        Optional<AccessMode> resultingMode = editedMode.isPresent() ? editedMode : otherMode;
+        Optional<LockRecord> existingLock = lockState.getLock(containerGroup);
+        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(signPos);
 
         if (existingLock.isPresent()) {
-            return handleExistingLock(player, signPos, signEntity, newLines, isFrontText, containerGroup, existingLock.get(), lockState, isPrivateSign);
-        } else {
-            return handleNewLock(player, signPos, signEntity, newLines, isFrontText, containerGroup, lockState, isPrivateSign);
+            return handleExistingProtection(player, signPos, signEntity, newLines, isFrontText, containerGroup, existingLock.get(), dormantSign, lockState, resultingMode);
         }
+
+        return handleUnlockedContainer(player, signPos, signEntity, newLines, isFrontText, containerGroup, dormantSign, lockState, resultingMode);
     }
 
-    /**
-     * Handle editing a sign when there's already a lock on the container.
-     */
-    private static boolean handleExistingLock(
+    public static boolean reactivateDormantSign(ServerPlayer player, Level level, BlockPos signPos) {
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return false;
+        }
+
+        LockState lockState = LockState.get(serverLevel.getServer());
+        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(signPos);
+        if (dormantSign.isEmpty() || !canManageDormantSign(player, dormantSign.get())) {
+            return false;
+        }
+
+        Optional<BlockPos> attachedPos = SignUtils.getAttachedBlock(level, signPos);
+        if (attachedPos.isEmpty()) {
+            lockState.removeDormantSign(signPos);
+            return false;
+        }
+
+        Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, attachedPos.get());
+        if (containerGroup.isEmpty() || lockState.getLock(containerGroup).isPresent()) {
+            return false;
+        }
+
+        if (!(level.getBlockEntity(signPos) instanceof SignBlockEntity signEntity)) {
+            lockState.removeDormantSign(signPos);
+            return false;
+        }
+
+        Optional<AccessMode> frontMode = SignUtils.getAccessMode(signEntity, true);
+        Optional<AccessMode> backMode = SignUtils.getAccessMode(signEntity, false);
+        if (frontMode.isPresent() && backMode.isPresent() && frontMode.get() != backMode.get()) {
+            return false;
+        }
+
+        Optional<AccessMode> mode = frontMode.isPresent() ? frontMode : backMode;
+        if (mode.isEmpty()) {
+            lockState.removeDormantSign(signPos);
+            return false;
+        }
+
+        return createNewLock(
+            player,
+            signPos,
+            signEntity,
+            Collections.emptyList(),
+            true,
+            containerGroup,
+            lockState,
+            dormantSign.get().getOwnerUuid(),
+            dormantSign.get().getOwnerName(),
+            mode.get(),
+            AccessControlService.isAdmin(player)
+        );
+    }
+
+    private static boolean handleExistingProtection(
+        ServerPlayer player,
+        BlockPos signPos,
+        SignBlockEntity signEntity,
+        java.util.List<net.minecraft.server.network.FilteredText> newLines,
+        boolean isFrontText,
+        Set<BlockPos> containerGroup,
+        LockRecord existingLock,
+        Optional<DormantSignRecord> dormantSign,
+        LockState lockState,
+        Optional<AccessMode> resultingMode
+    ) {
+        if (existingLock.getSignPos().equals(signPos)) {
+            return handleActiveSignEdit(player, signPos, signEntity, newLines, isFrontText, containerGroup, existingLock, lockState, resultingMode);
+        }
+
+        if (!canManageLock(player, existingLock) && (resultingMode.isPresent() || dormantSign.isPresent())) {
+            player.sendSystemMessage(Component.literal("You cannot edit someone else's protected sign."));
+            return false;
+        }
+
+        if (resultingMode.isPresent()) {
+            DormantSignRecord record = dormantSign.orElseGet(() -> new DormantSignRecord(
+                player.getUUID(),
+                player.getName().getString(),
+                signPos
+            ));
+            lockState.addDormantSign(record);
+            if (dormantSign.isEmpty()) {
+                player.sendSystemMessage(Component.literal(
+                    "Alternate protection sign saved. It stays inactive until the container is unprotected and its owner reactivates it."
+                ));
+            }
+        } else if (dormantSign.isPresent()) {
+            lockState.removeDormantSign(signPos);
+        }
+
+        return true;
+    }
+
+    private static boolean handleActiveSignEdit(
         ServerPlayer player,
         BlockPos signPos,
         SignBlockEntity signEntity,
@@ -93,160 +173,159 @@ public class SignEditService {
         Set<BlockPos> containerGroup,
         LockRecord existingLock,
         LockState lockState,
-        boolean isPrivateSign
+        Optional<AccessMode> resultingMode
     ) {
-        // Check if this is the private sign for this lock
-        boolean isTheLockSign = existingLock.getSignPos().equals(signPos);
+        if (!canManageLock(player, existingLock)) {
+            player.sendSystemMessage(Component.literal("You cannot edit someone else's protected sign."));
+            return false;
+        }
 
-        if (isTheLockSign) {
-            // Editing the lock's private sign
-            // Only owner or admin can edit
-            if (!player.getUUID().equals(existingLock.getOwnerUuid()) && !AccessControlService.isAdmin(player)) {
-                player.sendSystemMessage(Component.literal(
-                    "You cannot edit someone else's [private] sign."
-                ));
-                return false;
-            }
-
-            // If the sign no longer has [private], remove the lock
-            if (!isPrivateSign) {
-                PrivateChests.LOGGER.info("Player {} removed [private] from sign at {}, removing lock",
-                    player.getName().getString(), signPos);
-                lockState.removeLock(containerGroup.iterator().next());
-                player.sendSystemMessage(Component.literal("Lock removed from container."));
-                return true;
-            }
-
-            // Extract allowed users from BOTH sides of the sign
-            Set<String> allowedUsers = extractUsersFromBothSides(signEntity, newLines, isFrontText);
-
-            // Filter out the owner's name - they already have access via ownership
-            // Use case-insensitive comparison to catch variations
-            allowedUsers.removeIf(name -> name.equalsIgnoreCase(existingLock.getOwnerName()));
-
-            // Only update if the allowed users actually changed
-            if (!allowedUsers.equals(existingLock.getAllowedUsers())) {
-                LockRecord updatedLock = new LockRecord(
-                    existingLock.getOwnerUuid(),
-                    existingLock.getOwnerName(),
-                    existingLock.getSignPos(),
-                    existingLock.getContainerPositions(),
-                    allowedUsers,
-                    existingLock.getCreatedAt(),           // Preserve original creation time
-                    System.currentTimeMillis()              // Update last modified time
-                );
-
-                lockState.removeLock(containerGroup.iterator().next());
-                lockState.addLock(updatedLock);
-
-                PrivateChests.LOGGER.info("Player {} updated allowed users on lock at {}",
-                    player.getName().getString(), signPos);
-
-                player.sendSystemMessage(Component.literal(
-                    "Lock updated. " + allowedUsers.size() + " player(s) now have access."
-                ));
-            }
-
-            return true;
-        } else {
-            // Trying to add another [private] sign to an already locked container
-            if (isPrivateSign) {
-                player.sendSystemMessage(Component.literal(
-                    "This container is already protected by another [private] sign."
-                ));
-                return false;
-            }
-
-            // Not adding [private], allow edit
+        if (resultingMode.isEmpty()) {
+            PrivateChests.LOGGER.info(
+                "Player {} removed protection marker from sign at {}, removing lock",
+                player.getName().getString(),
+                signPos
+            );
+            lockState.removeLock(containerGroup.iterator().next());
+            player.sendSystemMessage(Component.literal("Protection removed from container."));
             return true;
         }
+
+        Set<String> allowedUsers = extractAllowedUsers(resultingMode.get(), existingLock.getOwnerName(), signEntity, newLines, isFrontText);
+        if (existingLock.getAccessMode() == resultingMode.get() && allowedUsers.equals(existingLock.getAllowedUsers())) {
+            return true;
+        }
+
+        LockRecord updatedLock = new LockRecord(
+            existingLock.getOwnerUuid(),
+            existingLock.getOwnerName(),
+            existingLock.getSignPos(),
+            existingLock.getContainerPositions(),
+            resultingMode.get(),
+            allowedUsers,
+            existingLock.getCreatedAt(),
+            System.currentTimeMillis()
+        );
+
+        lockState.removeLock(containerGroup.iterator().next());
+        lockState.addLock(updatedLock);
+
+        PrivateChests.LOGGER.info("Player {} updated protection at {}", player.getName().getString(), signPos);
+        player.sendSystemMessage(Component.literal(messageForUpdatedLock(updatedLock)));
+        return true;
     }
 
-    /**
-     * Handle creating a new lock (sign being edited to add [private]).
-     */
-    private static boolean handleNewLock(
+    private static boolean handleUnlockedContainer(
         ServerPlayer player,
         BlockPos signPos,
         SignBlockEntity signEntity,
         java.util.List<net.minecraft.server.network.FilteredText> newLines,
         boolean isFrontText,
         Set<BlockPos> containerGroup,
+        Optional<DormantSignRecord> dormantSign,
         LockState lockState,
-        boolean isPrivateSign
+        Optional<AccessMode> resultingMode
     ) {
-        if (!isPrivateSign) {
-            return true; // Not adding [private], allow edit
+        if (dormantSign.isPresent()) {
+            DormantSignRecord record = dormantSign.get();
+            if (!canManageDormantSign(player, record)) {
+                player.sendSystemMessage(Component.literal("You cannot edit someone else's protected sign."));
+                return false;
+            }
+
+            if (resultingMode.isEmpty()) {
+                lockState.removeDormantSign(signPos);
+                return true;
+            }
+
+            return createNewLock(
+                player,
+                signPos,
+                signEntity,
+                newLines,
+                isFrontText,
+                containerGroup,
+                lockState,
+                record.getOwnerUuid(),
+                record.getOwnerName(),
+                resultingMode.get(),
+                AccessControlService.isAdmin(player)
+            );
         }
 
-        // Enforce per-player lock limit (admins are exempt)
+        if (resultingMode.isEmpty()) {
+            return true;
+        }
+
+        return createNewLock(
+            player,
+            signPos,
+            signEntity,
+            newLines,
+            isFrontText,
+            containerGroup,
+            lockState,
+            player.getUUID(),
+            player.getName().getString(),
+            resultingMode.get(),
+            AccessControlService.isAdmin(player)
+        );
+    }
+
+    private static boolean createNewLock(
+        ServerPlayer actor,
+        BlockPos signPos,
+        SignBlockEntity signEntity,
+        java.util.List<net.minecraft.server.network.FilteredText> newLines,
+        boolean isFrontText,
+        Set<BlockPos> containerGroup,
+        LockState lockState,
+        UUID ownerUuid,
+        String ownerName,
+        AccessMode accessMode,
+        boolean bypassLimit
+    ) {
         int maxLocks = PrivateChests.getConfig().getMaxLocksPerPlayer();
-        if (maxLocks > 0 && !AccessControlService.isAdmin(player)) {
-            int currentLocks = lockState.countLocksForPlayer(player.getUUID());
+        if (maxLocks > 0 && !bypassLimit) {
+            int currentLocks = lockState.countLocksForPlayer(ownerUuid);
             if (currentLocks >= maxLocks) {
-                player.sendSystemMessage(Component.literal(
-                    "You have reached the maximum of " + maxLocks + " locked container(s). "
-                    + "Remove an existing lock before adding a new one."
+                actor.sendSystemMessage(Component.literal(
+                    "You have reached the maximum of " + maxLocks + " locked container(s). Remove an existing lock before adding a new one."
                 ));
                 return false;
             }
         }
 
-        // Extract allowed users from BOTH sides of the sign
-        Set<String> allowedUsers = extractUsersFromBothSides(signEntity, newLines, isFrontText);
-
-        // Filter out the owner's name - they already have access via ownership
-        String ownerName = player.getName().getString();
-        allowedUsers.removeIf(name -> name.equalsIgnoreCase(ownerName));
-
-        LockRecord newLock = new LockRecord(
-            player.getUUID(),
-            ownerName,
-            signPos,
-            containerGroup,
-            allowedUsers
-        );
+        Set<String> allowedUsers = extractAllowedUsers(accessMode, ownerName, signEntity, newLines, isFrontText);
+        LockRecord newLock = new LockRecord(ownerUuid, ownerName, signPos, containerGroup, accessMode, allowedUsers);
 
         lockState.addLock(newLock);
+        lockState.removeDormantSign(signPos);
 
-        PrivateChests.LOGGER.info("Player {} created new lock at {} for container group with {} blocks",
-            player.getName().getString(), signPos, containerGroup.size());
-
-        player.sendSystemMessage(Component.literal(
-            "Container is now protected. Only you and listed players can access it."
-        ));
-
+        PrivateChests.LOGGER.info("Player {} created new protection at {}", actor.getName().getString(), signPos);
+        actor.sendSystemMessage(Component.literal(messageForCreatedLock(newLock)));
         return true;
     }
 
-    /**
-     * Extract allowed users from both sides of a sign.
-     * Combines usernames from the edited side (new text) and the other side (existing text).
-     *
-     * @param signEntity The sign block entity
-     * @param editedSideText The new text for the side being edited
-     * @param isEditingFront True if editing front side, false if editing back side
-     * @return Combined set of all usernames from both sides
-     */
-    private static Set<String> extractUsersFromBothSides(
+    private static Set<String> extractAllowedUsers(
+        AccessMode accessMode,
+        String ownerName,
         SignBlockEntity signEntity,
         java.util.List<net.minecraft.server.network.FilteredText> editedSideText,
         boolean isEditingFront
     ) {
-        Set<String> users = new HashSet<>();
+        if (accessMode.isPublic()) {
+            return Collections.emptySet();
+        }
 
-        // Extract from the edited side (new text)
+        Set<String> users = new HashSet<>();
         users.addAll(SignUtils.extractAllowedUsers(editedSideText));
 
-        // Extract from the OTHER side (existing text from sign entity)
         boolean otherSideIsFront = !isEditingFront;
-        boolean otherSideHasPrivate = SignUtils.containsPrivateMarker(signEntity, otherSideIsFront);
-        int startLine = otherSideHasPrivate ? 1 : 0;
-
+        int startLine = SignUtils.containsProtectionMarker(signEntity, otherSideIsFront) ? 1 : 0;
         for (int i = startLine; i < 4; i++) {
             String line = signEntity.getText(otherSideIsFront).getMessage(i, false).getString().trim();
             if (!line.isEmpty()) {
-                // Use the same comma-separation logic
                 String[] parts = line.split(",");
                 for (String part : parts) {
                     String username = part.trim();
@@ -257,6 +336,29 @@ public class SignEditService {
             }
         }
 
+        users.removeIf(name -> name.equalsIgnoreCase(ownerName));
         return users;
+    }
+
+    private static boolean canManageLock(ServerPlayer player, LockRecord lock) {
+        return player.getUUID().equals(lock.getOwnerUuid()) || AccessControlService.isAdmin(player);
+    }
+
+    private static boolean canManageDormantSign(ServerPlayer player, DormantSignRecord dormantSign) {
+        return player.getUUID().equals(dormantSign.getOwnerUuid()) || AccessControlService.isAdmin(player);
+    }
+
+    private static String messageForCreatedLock(LockRecord lock) {
+        if (lock.getAccessMode().isPublic()) {
+            return "Container is now public. Anyone can open it, but only the owner or an admin can manage its protection.";
+        }
+        return "Container is now protected. Only you and listed players can access it.";
+    }
+
+    private static String messageForUpdatedLock(LockRecord lock) {
+        if (lock.getAccessMode().isPublic()) {
+            return "Protection updated. This container is public.";
+        }
+        return "Lock updated. " + lock.getAllowedUsers().size() + " player(s) now have access.";
     }
 }

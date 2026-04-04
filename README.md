@@ -1,6 +1,6 @@
 # Private Chests
 
-A server-side Minecraft mod for protecting chests and barrels using wall signs with `[private]` markers.
+A server-side Minecraft mod for protecting chests and barrels using wall signs with `[private]` and `[public]` markers.
 
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](LICENSE)
 [![Minecraft](https://img.shields.io/badge/Minecraft-26.1.1-green.svg)](https://www.minecraft.net/)
@@ -8,7 +8,7 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
 
 ## Features
 
-- **Sign-Based Protection**: Place a wall sign on any chest or barrel with `[private]` on the first line (front or back) to lock it
+- **Sign-Based Protection**: Place a wall sign on any chest or barrel with `[private]` or `[public]` on the first line (front or back)
 - **Multi-User Access**: Add usernames on remaining lines to grant access (comma-separated or line-by-line)
 - **Two-Sided Signs**: Use both front and back of signs
 - **Double Chest Support**: Automatically handles double chests and chest expansion
@@ -39,12 +39,12 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
 
 ## Usage
 
-### Creating a Private Chest
+### Creating a Protected Container
 
 1. Place a chest or barrel
 2. Attach a wall sign to it
-3. On the first line (front or back of the sign), write `[private]` (case-insensitive)
-4. Add usernames on the remaining lines to grant access. For Example:
+3. On the first line (front or back of the sign), write `[private]` or `[public]` (case-insensitive)
+4. For `[private]`, add usernames on the remaining lines to grant access. For example:
    ```
    [private]
    PlayerName
@@ -53,7 +53,7 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
 
 ### Sign Format Rules
 
-- `[private]` must be on line 1 only (exact match, case-insensitive)
+- `[private]` and `[public]` must be on line 1 only (exact match, case-insensitive)
 - Can be on front OR back of sign
 - Usernames on lines 2-4 of front and back
 - Supports comma-separated names: `Player1, Player2` or `Player1,Player2`
@@ -61,11 +61,18 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
 
 ### Managing Access
 
-**Edit existing sign**: Only the owner or admin can edit the private sign
+**Edit existing sign**: Only the owner or admin can edit the controlling protection sign
 
-**Remove protection**: Remove `[private]` from both sides of the sign
+**Remove protection**: Remove the active protection marker from both sides of the sign
 
 **Break chest**: Owners can break their locked chest directly (auto-removes lock)
+
+### Public containers
+
+- `[public]` lets anyone open the container
+- `[public]` still keeps the container protected from block breaking, explosions, and fire
+- Only the sign owner or an admin can edit or remove a `[public]` sign
+- Extra protection signs placed on an already-protected container stay dormant until the current protection is gone and that sign's owner reactivates it
 
 ## Admin Commands
 
@@ -74,13 +81,17 @@ All commands require admin permission level 3 (configurable).
 ### `/private_chests` (alias: `/pchests`)
 
 **List all locks:**
-```
+``` 
 /private_chests list
+/private_chests list public
+/private_chests list private
 ```
 
 **List locks in area:**
-```
+``` 
 /private_chests list_in_area [radius]
+/private_chests list_in_area [radius] public
+/private_chests list_in_area [radius] private
 ```
 Radius in chunks (default: 1 = 2x2 chunks). Max: 10.
 
@@ -94,6 +105,12 @@ Shows owner, allowed users, and timestamps.
 ```
 /private_chests unlock <x> <y> <z>
 ```
+
+**Cleanup dangling records:**
+```
+/private_chests cleanup
+```
+Removes stale active locks and stale dormant protection-sign records in loaded chunks.
 
 ## Configuration
 

@@ -10,6 +10,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Service for checking if automation should be blocked for a container.
@@ -34,8 +35,8 @@ public class AutomationBlockService {
         MinecraftServer server = serverLevel.getServer();
         LockState lockState = LockState.get(server);
 
-        // Check if this container is locked
-        Optional<LockRecord> lockOpt = lockState.getLock(pos);
+        Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, pos);
+        Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
         if (lockOpt.isEmpty()) {
             return false; // Not locked, allow automation
         }

@@ -3,6 +3,7 @@ package com.simpleforapanda.privatechests.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.simpleforapanda.privatechests.PrivateChests;
+import com.simpleforapanda.privatechests.model.AccessMode;
 import com.simpleforapanda.privatechests.model.LockRecord;
 import com.simpleforapanda.privatechests.service.AccessControlService;
 import com.simpleforapanda.privatechests.state.LockState;
@@ -72,25 +73,26 @@ public class PlayerLockCommand {
         Set<LockRecord> myLocks = lockState.getLocksByOwner(player.getUUID());
 
         if (myLocks.isEmpty()) {
-            source.sendSuccess(() -> Component.literal("You have no locked containers."), false);
+            source.sendSuccess(() -> Component.literal("You have no protected containers."), false);
             return 0;
         }
 
         int maxLocks = PrivateChests.getConfig().getMaxLocksPerPlayer();
         String limitSuffix = maxLocks > 0 ? " / " + maxLocks : "";
         source.sendSuccess(() -> Component.literal(
-            "===== Your Locked Containers (" + myLocks.size() + limitSuffix + ") ====="
+            "===== Your Protected Containers (" + myLocks.size() + limitSuffix + ") ====="
         ), false);
 
         ServerLevel level = source.getLevel();
         for (LockRecord lock : myLocks) {
             String containerType = ContainerUtils.getContainerTypeName(level, lock.getContainerPositions());
             String pos = ContainerUtils.positionToString(ContainerUtils.getPrimaryPosition(lock.getContainerPositions()));
-            String users = lock.getAllowedUsers().isEmpty()
-                ? "(none)"
-                : String.join(", ", lock.getAllowedUsers());
+            String mode = lock.getAccessMode() == AccessMode.PUBLIC ? "public" : "private";
+            String users = lock.getAccessMode() == AccessMode.PUBLIC
+                ? "(everyone)"
+                : lock.getAllowedUsers().isEmpty() ? "(none)" : String.join(", ", lock.getAllowedUsers());
             source.sendSuccess(() -> Component.literal(
-                "  " + containerType + " at " + pos + " | Allowed: " + users
+                "  " + containerType + " at " + pos + " | Mode: " + mode + " | Allowed: " + users
             ), false);
         }
 
@@ -121,11 +123,7 @@ public class PlayerLockCommand {
                 return 0;
             }
 
-            Optional<LockRecord> lockOpt = Optional.empty();
-            for (BlockPos groupPos : containerGroup) {
-                lockOpt = lockState.getLock(groupPos);
-                if (lockOpt.isPresent()) break;
-            }
+            Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
 
             if (lockOpt.isEmpty()) {
                 source.sendFailure(Component.literal("No lock found at " + ContainerUtils.positionToString(pos)));
@@ -151,8 +149,11 @@ public class PlayerLockCommand {
             source.sendSuccess(() -> Component.literal("Container: " + containerType), false);
             source.sendSuccess(() -> Component.literal("Location:  " + location), false);
             source.sendSuccess(() -> Component.literal("Owner:     " + ownerName), false);
+            source.sendSuccess(() -> Component.literal("Mode:      " + lock.getAccessMode().name().toLowerCase()), false);
 
-            if (lock.getAllowedUsers().isEmpty()) {
+            if (lock.getAccessMode() == AccessMode.PUBLIC) {
+                source.sendSuccess(() -> Component.literal("Allowed:   everyone"), false);
+            } else if (lock.getAllowedUsers().isEmpty()) {
                 source.sendSuccess(() -> Component.literal("Allowed:   (none – owner only)"), false);
             } else {
                 source.sendSuccess(() -> Component.literal("Allowed:   " + String.join(", ", lock.getAllowedUsers())), false);
@@ -191,11 +192,7 @@ public class PlayerLockCommand {
                 return 0;
             }
 
-            Optional<LockRecord> lockOpt = Optional.empty();
-            for (BlockPos groupPos : containerGroup) {
-                lockOpt = lockState.getLock(groupPos);
-                if (lockOpt.isPresent()) break;
-            }
+            Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
 
             if (lockOpt.isEmpty()) {
                 source.sendFailure(Component.literal("No lock found at " + ContainerUtils.positionToString(pos)));
@@ -235,6 +232,7 @@ public class PlayerLockCommand {
                 targetPlayer.getName().getString(),
                 lock.getSignPos(),
                 lock.getContainerPositions(),
+                lock.getAccessMode(),
                 lock.getAllowedUsers(),
                 lock.getCreatedAt(),
                 System.currentTimeMillis()
