@@ -178,7 +178,7 @@ public class BlockBreakHandler {
         var server = player.level().getServer();
         var ownerPlayer = server.getPlayerList().getPlayer(lock.getOwnerUuid());
         if (ownerPlayer != null) {
-            boolean isBanned = server.getPlayerList().getBans().isBanned(player.getGameProfile());
+            boolean isBanned = server.getPlayerList().getBans().isBanned(ownerPlayer.getGameProfile());
             if (isBanned && PrivateChests.getConfig().isDisableProtectionIfOwnerBanned()) {
                 return true;
             }
