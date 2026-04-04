@@ -1,5 +1,6 @@
 package com.simpleforapanda.privatechests;
 
+import com.simpleforapanda.privatechests.command.PlayerLockCommand;
 import com.simpleforapanda.privatechests.command.PrivateChestsCommand;
 import com.simpleforapanda.privatechests.config.ModConfig;
 import net.fabricmc.api.ModInitializer;
@@ -35,6 +36,7 @@ public class PrivateChests implements ModInitializer {
 		// Register commands
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
 			PrivateChestsCommand.register(dispatcher);
+			PlayerLockCommand.register(dispatcher);
 		});
 
 		LOGGER.info("Private Chests v{} initialized successfully!", version);

@@ -11,7 +11,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -173,18 +172,11 @@ public class BlockBreakHandler {
     }
 
     /**
-     * Check if the owner of a lock is banned and protection should be disabled.
+     * Returns true when the owner is banned AND the config says protection should
+     * be disabled for banned owners.  Works for offline players.
      */
     private static boolean isOwnerBanned(ServerPlayer player, LockRecord lock) {
         var server = player.level().getServer();
-        var ownerPlayer = server.getPlayerList().getPlayer(lock.getOwnerUuid());
-        if (ownerPlayer != null) {
-            boolean isBanned = server.getPlayerList().getBans().isBanned(new NameAndId(player.getGameProfile()));
-            if (isBanned && PrivateChests.getConfig().isDisableProtectionIfOwnerBanned()) {
-                return true;
-            }
-        }
-
-        return false;
+        return AccessControlService.shouldDisableProtectionForBannedOwner(server, lock);
     }
 }

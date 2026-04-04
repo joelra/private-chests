@@ -1,7 +1,6 @@
 package com.simpleforapanda.privatechests.event;
 
 import com.simpleforapanda.privatechests.PrivateChests;
-import com.simpleforapanda.privatechests.config.ModConfig;
 import com.simpleforapanda.privatechests.model.LockRecord;
 import com.simpleforapanda.privatechests.service.AccessControlService;
 import com.simpleforapanda.privatechests.state.LockState;
@@ -84,8 +83,6 @@ public class ContainerEventHandler {
                             // Check if player can edit this sign
                             boolean isOwner = player.getUUID().equals(lock.getOwnerUuid());
                             boolean isAdmin = AccessControlService.isAdmin(serverPlayer);
-                            ModConfig config = PrivateChests.getConfig();
-                            boolean isAllowed = lock.isUserAllowed(player.getName().getString(), config.getFloodgatePrefix());
 
                             // Only owner can edit the sign (not allowed users)
                             if (!isOwner && !isAdmin) {

@@ -3,7 +3,7 @@
 A server-side Minecraft mod for protecting chests and barrels using wall signs with `[private]` markers.
 
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](LICENSE)
-[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11-green.svg)](https://www.minecraft.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-26.1.1-green.svg)](https://www.minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Mod%20Loader-Fabric-orange.svg)](https://fabricmc.net/)
 
 ## Features
@@ -27,10 +27,10 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
 ## Installation
 
 ### Requirements
-- Minecraft 1.21.11
-- Fabric Loader 0.18.4+
+- Minecraft 26.1.1
+- Fabric Loader 0.18.5+
 - Fabric API
-- Java 21+
+- Java 25+
 
 ### Steps
 1. Download the latest release from [Releases](https://github.com/joelra/private-chests/releases)

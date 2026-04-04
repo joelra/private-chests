@@ -1,33 +1,39 @@
 package com.simpleforapanda.privatechests.state;
 
+import com.simpleforapanda.privatechests.PrivateChests;
 import com.simpleforapanda.privatechests.model.LockRecord;
 import com.mojang.serialization.Codec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
-import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraft.world.level.storage.SavedDataStorage;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages all lock records for the server.
  * Persists lock data across server restarts.
+ *
+ * <p>Two indices are maintained:</p>
+ * <ul>
+ *   <li>{@code locksByPosition} – O(1) lookup of a lock by any container block position.</li>
+ *   <li>{@code locksByOwner} – O(1) lookup / count of all locks owned by a player UUID.
+ *       Also used as the canonical deduplicated set for serialisation.</li>
+ * </ul>
  */
 public class LockState extends SavedData {
     private static final String FILE_NAME = "private_chests";
 
-    // Map container positions to their lock records
-    private final Map<BlockPos, LockRecord> locksByPosition = new ConcurrentHashMap<>();
+    // Map container positions to their lock records (multiple positions per double-chest)
+    private final Map<BlockPos, LockRecord> locksByPosition = new HashMap<>();
 
-    // Map container group IDs to their lock records for efficient lookup
-    private final Map<String, LockRecord> locksByGroupId = new ConcurrentHashMap<>();
+    // Map owner UUID to the set of locks they own (one record per unique lock)
+    private final Map<UUID, Set<LockRecord>> locksByOwner = new HashMap<>();
 
     public LockState() {
         super();
@@ -59,9 +65,7 @@ public class LockState extends SavedData {
         public <T> com.mojang.serialization.DataResult<T> encode(LockState input,
                 com.mojang.serialization.DynamicOps<T> ops, T prefix) {
             try {
-                // Save to NBT using our existing method
                 CompoundTag nbt = input.save(new CompoundTag(), null);
-                // Return the NBT tag directly (works with NbtOps and JsonOps via conversion)
                 return com.mojang.serialization.DataResult.success((T) nbt);
             } catch (Exception e) {
                 return com.mojang.serialization.DataResult.error(() -> "Failed to save LockState: " + e.getMessage());
@@ -70,7 +74,7 @@ public class LockState extends SavedData {
     };
 
     private static final SavedDataType<LockState> TYPE = new SavedDataType<>(
-        FILE_NAME,
+        Identifier.fromNamespaceAndPath(PrivateChests.MOD_ID, FILE_NAME),
         LockState::new,
         CODEC,
         null   // DataFixTypes
@@ -80,7 +84,7 @@ public class LockState extends SavedData {
      * Get the LockState instance for the server.
      */
     public static LockState get(MinecraftServer server) {
-        DimensionDataStorage storage = server.overworld().getDataStorage();
+        SavedDataStorage storage = server.overworld().getDataStorage();
         return storage.computeIfAbsent(TYPE);
     }
 
@@ -94,15 +98,7 @@ public class LockState extends SavedData {
             for (int i = 0; i < lockList.size(); i++) {
                 lockList.getCompound(i).ifPresent(lockTag -> {
                     LockRecord record = LockRecord.fromNbt(lockTag);
-
-                    // Add to position map for all container positions
-                    for (BlockPos pos : record.getContainerPositions()) {
-                        state.locksByPosition.put(pos, record);
-                    }
-
-                    // Add to group ID map
-                    String groupId = state.computeGroupId(record.getContainerPositions());
-                    state.locksByGroupId.put(groupId, record);
+                    state.indexRecord(record);
                 });
             }
         });
@@ -112,14 +108,14 @@ public class LockState extends SavedData {
 
     /**
      * Save lock state to NBT.
+     * Uses the owner index as the canonical deduplicated record set – no temporary
+     * collection needed.
      */
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider provider) {
         ListTag lockList = new ListTag();
 
-        // Save each unique lock record once (avoid duplicates from position map)
-        Set<LockRecord> savedRecords = new HashSet<>();
-        for (LockRecord record : locksByPosition.values()) {
-            if (savedRecords.add(record)) {
+        for (Set<LockRecord> ownerLocks : locksByOwner.values()) {
+            for (LockRecord record : ownerLocks) {
                 lockList.add(record.toNbt());
             }
         }
@@ -128,53 +124,38 @@ public class LockState extends SavedData {
         return tag;
     }
 
+    // -------------------------------------------------------------------------
+    // Mutation
+    // -------------------------------------------------------------------------
+
     /**
      * Add a new lock record.
      */
     public void addLock(LockRecord record) {
-        // Add to position map for all container positions
-        for (BlockPos pos : record.getContainerPositions()) {
-            locksByPosition.put(pos, record);
-        }
-
-        // Add to group ID map
-        String groupId = computeGroupId(record.getContainerPositions());
-        locksByGroupId.put(groupId, record);
-
+        indexRecord(record);
         setDirty();
     }
 
     /**
-     * Remove a lock record by container position.
+     * Remove the lock record associated with the given container position.
      */
     public void removeLock(BlockPos containerPos) {
         LockRecord record = locksByPosition.get(containerPos);
         if (record != null) {
-            // Remove from position map for all container positions
-            for (BlockPos pos : record.getContainerPositions()) {
-                locksByPosition.remove(pos);
-            }
-
-            // Remove from group ID map
-            String groupId = computeGroupId(record.getContainerPositions());
-            locksByGroupId.remove(groupId);
-
+            unindexRecord(record);
             setDirty();
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Queries
+    // -------------------------------------------------------------------------
 
     /**
      * Get the lock record for a container position.
      */
     public Optional<LockRecord> getLock(BlockPos containerPos) {
         return Optional.ofNullable(locksByPosition.get(containerPos));
-    }
-
-    /**
-     * Get the lock record for a container group.
-     */
-    public Optional<LockRecord> getLockByGroupId(String groupId) {
-        return Optional.ofNullable(locksByGroupId.get(groupId));
     }
 
     /**
@@ -185,11 +166,30 @@ public class LockState extends SavedData {
     }
 
     /**
-     * Get all lock records.
+     * Get all unique lock records across all owners.
      */
     public Collection<LockRecord> getAllLocks() {
-        // Return unique records only
-        return new HashSet<>(locksByPosition.values());
+        List<LockRecord> all = new ArrayList<>();
+        for (Set<LockRecord> ownerLocks : locksByOwner.values()) {
+            all.addAll(ownerLocks);
+        }
+        return all;
+    }
+
+    /**
+     * Get all locks owned by a specific player.
+     */
+    public Set<LockRecord> getLocksByOwner(UUID playerUuid) {
+        Set<LockRecord> ownerLocks = locksByOwner.get(playerUuid);
+        return ownerLocks != null ? Collections.unmodifiableSet(ownerLocks) : Collections.emptySet();
+    }
+
+    /**
+     * Return the number of unique containers locked by the given player.
+     */
+    public int countLocksForPlayer(UUID playerUuid) {
+        Set<LockRecord> ownerLocks = locksByOwner.get(playerUuid);
+        return ownerLocks != null ? ownerLocks.size() : 0;
     }
 
     /**
@@ -203,14 +203,16 @@ public class LockState extends SavedData {
 
         Set<LockRecord> uniqueLocks = new HashSet<>();
 
-        for (LockRecord record : locksByPosition.values()) {
-            for (BlockPos pos : record.getContainerPositions()) {
-                int chunkX = pos.getX() >> 4;
-                int chunkZ = pos.getZ() >> 4;
+        for (Set<LockRecord> ownerLocks : locksByOwner.values()) {
+            for (LockRecord record : ownerLocks) {
+                for (BlockPos pos : record.getContainerPositions()) {
+                    int chunkX = pos.getX() >> 4;
+                    int chunkZ = pos.getZ() >> 4;
 
-                if (chunkX >= minX && chunkX <= maxX && chunkZ >= minZ && chunkZ <= maxZ) {
-                    uniqueLocks.add(record);
-                    break;
+                    if (chunkX >= minX && chunkX <= maxX && chunkZ >= minZ && chunkZ <= maxZ) {
+                        uniqueLocks.add(record);
+                        break;
+                    }
                 }
             }
         }
@@ -219,49 +221,50 @@ public class LockState extends SavedData {
     }
 
     /**
-     * Compute a unique group ID for a set of container positions.
-     * For single containers, this is just the position string.
-     * For double chests, this combines both positions in a sorted order.
-     */
-    public String computeGroupId(Set<BlockPos> positions) {
-        if (positions.isEmpty()) {
-            return "";
-        }
-
-        if (positions.size() == 1) {
-            BlockPos pos = positions.iterator().next();
-            return pos.getX() + "," + pos.getY() + "," + pos.getZ();
-        }
-
-        // Sort positions for consistent group ID
-        List<BlockPos> sorted = new ArrayList<>(positions);
-        sorted.sort(Comparator.comparingLong(BlockPos::asLong));
-
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < sorted.size(); i++) {
-            if (i > 0) sb.append(";");
-            BlockPos pos = sorted.get(i);
-            sb.append(pos.getX()).append(",").append(pos.getY()).append(",").append(pos.getZ());
-        }
-
-        return sb.toString();
-    }
-
-    /**
      * Clean up dangling lock records (where the sign no longer exists).
-     * This should be called periodically or during access checks.
+     * The supplied predicate returns {@code true} if the record is still valid.
      */
     public void cleanupDanglingLocks(java.util.function.Predicate<LockRecord> isValid) {
-        List<BlockPos> toRemove = new ArrayList<>();
+        // Collect unique invalid records via the owner index to avoid duplicates
+        List<LockRecord> toRemove = new ArrayList<>();
 
-        for (Map.Entry<BlockPos, LockRecord> entry : locksByPosition.entrySet()) {
-            if (!isValid.test(entry.getValue())) {
-                toRemove.add(entry.getKey());
+        for (Set<LockRecord> ownerLocks : locksByOwner.values()) {
+            for (LockRecord record : ownerLocks) {
+                if (!isValid.test(record)) {
+                    toRemove.add(record);
+                }
             }
         }
 
-        for (BlockPos pos : toRemove) {
-            removeLock(pos);
+        for (LockRecord record : toRemove) {
+            // removeLock accepts any position in the container group
+            removeLock(record.getContainerPositions().iterator().next());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    /** Add {@code record} to both internal indices. */
+    private void indexRecord(LockRecord record) {
+        for (BlockPos pos : record.getContainerPositions()) {
+            locksByPosition.put(pos, record);
+        }
+        locksByOwner.computeIfAbsent(record.getOwnerUuid(), k -> new HashSet<>()).add(record);
+    }
+
+    /** Remove {@code record} from both internal indices. */
+    private void unindexRecord(LockRecord record) {
+        for (BlockPos pos : record.getContainerPositions()) {
+            locksByPosition.remove(pos);
+        }
+        Set<LockRecord> ownerLocks = locksByOwner.get(record.getOwnerUuid());
+        if (ownerLocks != null) {
+            ownerLocks.remove(record);
+            if (ownerLocks.isEmpty()) {
+                locksByOwner.remove(record.getOwnerUuid());
+            }
         }
     }
 }

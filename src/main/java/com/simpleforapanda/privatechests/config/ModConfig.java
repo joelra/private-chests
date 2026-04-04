@@ -30,6 +30,9 @@ public class ModConfig {
     // Disable protection if the owner is banned
     public boolean disableProtectionIfOwnerBanned = true;
 
+    // Maximum number of containers a single player may lock (0 = unlimited)
+    public int maxLocksPerPlayer = 0;
+
     /**
      * Load the configuration from file, or create default if it doesn't exist.
      */
@@ -88,11 +91,15 @@ public class ModConfig {
             needsSave = true;
         }
 
+        if (maxLocksPerPlayer < 0) {
+            PrivateChests.LOGGER.warn("Invalid maxLocksPerPlayer ({}), must be >= 0. Using default: 0 (unlimited)", maxLocksPerPlayer);
+            maxLocksPerPlayer = 0;
+            needsSave = true;
+        }
+
         if (needsSave) {
             PrivateChests.LOGGER.info("Configuration had invalid values, saving corrected version");
-            save(instance != null ?
-                java.nio.file.Paths.get("config") :
-                net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir());
+            save(net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir());
         }
     }
 
@@ -140,5 +147,9 @@ public class ModConfig {
 
     public boolean isDisableProtectionIfOwnerBanned() {
         return disableProtectionIfOwnerBanned;
+    }
+
+    public int getMaxLocksPerPlayer() {
+        return maxLocksPerPlayer;
     }
 }

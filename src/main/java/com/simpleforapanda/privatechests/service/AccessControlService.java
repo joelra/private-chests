@@ -10,9 +10,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.server.players.NameAndId;
-import net.minecraft.server.players.UserBanList;
 import net.minecraft.world.level.Level;
 
 import java.util.Optional;
@@ -62,12 +63,8 @@ public class AccessControlService {
             return AccessResult.allow();
         }
 
-        // Check if owner is banned
-        if (isOwnerBanned(server, lock)) {
-            ModConfig config = PrivateChests.getConfig();
-            if (config.isDisableProtectionIfOwnerBanned()) {
-                return AccessResult.allow();
-            }
+        if (shouldDisableProtectionForBannedOwner(server, lock)) {
+            return AccessResult.allow();
         }
 
         // Check admin bypass
@@ -86,40 +83,58 @@ public class AccessControlService {
             return AccessResult.allow();
         }
 
-        // Deny access
+        // Deny access — use the actual container type in the message
         String ownerName = getOwnerName(server, lock);
-        return AccessResult.deny("Cannot open " + ownerName + "'s private chest. Permission denied.");
+        String containerType = ContainerUtils.getContainerTypeName(level, lock.getContainerPositions()).toLowerCase();
+        return AccessResult.deny("Cannot open " + ownerName + "'s private " + containerType + ". Permission denied.");
     }
 
     /**
      * Check if a player is an admin (has bypass permission).
+     * Uses the configured {@code adminPermissionLevel}.
      */
     public static boolean isAdmin(ServerPlayer player) {
-        ModConfig config = PrivateChests.getConfig();
-        // Check if player is an operator with sufficient permission level
-        return player.permissions().hasPermission(Permissions.COMMANDS_MODERATOR);
-        //return player.server.getPlayerList().isOp(player.getGameProfile());
+        return hasAdminPermission(player.permissions());
+    }
+
+    public static boolean hasAdminPermission(PermissionSet permissions) {
+        int level = PrivateChests.getConfig().getAdminPermissionLevel();
+        if (level <= 0) {
+            return true;
+        }
+
+        Permission requiredPermission = switch (level) {
+            case 1 -> Permissions.COMMANDS_MODERATOR;
+            case 2 -> Permissions.COMMANDS_GAMEMASTER;
+            case 3 -> Permissions.COMMANDS_ADMIN;
+            default -> Permissions.COMMANDS_OWNER;
+        };
+
+        return permissions.hasPermission(requiredPermission);
     }
 
     /**
-     * Check if the owner of a lock is banned.
+     * Check if the owner of a lock is banned and protection should be disabled.
+     * Works correctly for offline players.
      */
-    private static boolean isOwnerBanned(MinecraftServer server, LockRecord lock) {
-        // Check if the owner UUID is banned
-        var player = server.getPlayerList().getPlayer(lock.getOwnerUuid());
-        if (player != null) {
-            return server.getPlayerList().getBans().isBanned(new NameAndId(player.getGameProfile()));
-        }
-        // If player is not online, we can't easily check ban status, so assume not banned
-        return false;
+    public static boolean isOwnerBanned(MinecraftServer server, LockRecord lock) {
+        return server.getPlayerList()
+            .getBans()
+            .isBanned(new NameAndId(lock.getOwnerUuid(), lock.getOwnerName()));
+    }
+
+    public static boolean shouldDisableProtectionForBannedOwner(MinecraftServer server, LockRecord lock) {
+        return PrivateChests.getConfig().isDisableProtectionIfOwnerBanned() && isOwnerBanned(server, lock);
     }
 
     /**
      * Get the display name of the lock owner.
+     * Returns the current in-game name when the player is online; otherwise
+     * falls back to the cached name stored in the lock record.
      */
-    private static String getOwnerName(MinecraftServer server, LockRecord lock) {
-        // Use the cached owner name from the lock record
-        return lock.getOwnerName();
+    public static String getOwnerName(MinecraftServer server, LockRecord lock) {
+        var onlinePlayer = server.getPlayerList().getPlayer(lock.getOwnerUuid());
+        return onlinePlayer != null ? onlinePlayer.getName().getString() : lock.getOwnerName();
     }
 
     /**

@@ -2,6 +2,7 @@ package com.simpleforapanda.privatechests.service;
 
 import com.simpleforapanda.privatechests.PrivateChests;
 import com.simpleforapanda.privatechests.model.LockRecord;
+import com.simpleforapanda.privatechests.service.AccessControlService;
 import com.simpleforapanda.privatechests.state.LockState;
 import com.simpleforapanda.privatechests.util.ContainerUtils;
 import com.simpleforapanda.privatechests.util.SignUtils;
@@ -176,6 +177,19 @@ public class SignEditService {
     ) {
         if (!isPrivateSign) {
             return true; // Not adding [private], allow edit
+        }
+
+        // Enforce per-player lock limit (admins are exempt)
+        int maxLocks = PrivateChests.getConfig().getMaxLocksPerPlayer();
+        if (maxLocks > 0 && !AccessControlService.isAdmin(player)) {
+            int currentLocks = lockState.countLocksForPlayer(player.getUUID());
+            if (currentLocks >= maxLocks) {
+                player.sendSystemMessage(Component.literal(
+                    "You have reached the maximum of " + maxLocks + " locked container(s). "
+                    + "Remove an existing lock before adding a new one."
+                ));
+                return false;
+            }
         }
 
         // Extract allowed users from BOTH sides of the sign
