@@ -3,11 +3,13 @@
 	"package": "com.simpleforapanda.privatechests.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"SignEditMixin",
 		"SignBreakPacketMixin",
 		"HopperBlockMixin",
 		"ExplosionMixin",
 		"FireBlockMixin"
+	],
+	"server": [
+		"SignEditMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
