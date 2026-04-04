@@ -172,7 +172,8 @@ public class BlockBreakHandler {
     }
 
     /**
-     * Check if the owner of a lock is banned and protection should be disabled.
+     * Returns true when the owner is banned AND the config says protection should
+     * be disabled for banned owners.  Works for offline players.
      */
     private static boolean isOwnerBanned(ServerPlayer player, LockRecord lock) {
         var server = player.level().getServer();
