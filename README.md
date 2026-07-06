@@ -27,8 +27,8 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
 ## Installation
 
 ### Requirements
-- Minecraft 26.1.1
-- Fabric Loader 0.18.5+
+- Minecraft 26.2
+- Fabric Loader 0.19.3+
 - Fabric API
 - Java 25+
 
