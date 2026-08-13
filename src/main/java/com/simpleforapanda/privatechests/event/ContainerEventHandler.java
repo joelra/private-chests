@@ -152,7 +152,13 @@ public class ContainerEventHandler {
             }
 
             if (level instanceof ServerLevel serverLevel) {
-                serverLevel.getServer().execute(() -> updateLockForExtendedChest(serverLevel, placementPos, lock));
+                // server.execute would run inline (we are on the server thread) and
+                // see the world before vanilla places the chest; defer a full tick.
+                var server = serverLevel.getServer();
+                server.schedule(new net.minecraft.server.TickTask(
+                    server.getTickCount() + 1,
+                    () -> updateLockForExtendedChest(serverLevel, placementPos, lock)
+                ));
             }
         }
 
