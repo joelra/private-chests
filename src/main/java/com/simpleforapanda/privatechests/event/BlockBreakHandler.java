@@ -60,6 +60,8 @@ public class BlockBreakHandler {
 
         LockRecord lock = lockOpt.get();
         if (isOwnerBanned(player, lock)) {
+            lockState.removeLock(lock);
+            PrivateChests.LOGGER.info("Locked container at {} broken (owner banned), lock removed", pos);
             return true;
         }
 
@@ -96,23 +98,25 @@ public class BlockBreakHandler {
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, attachedPos.get());
         Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
         if (lockOpt.isPresent() && lockOpt.get().getSignPos().equals(signPos)) {
-            return handleProtectedSignBreak(player, lockOpt.get());
+            return handleProtectedSignBreak(player, lockOpt.get(), lockState);
         }
 
         return true;
     }
 
-    private static boolean handleProtectedSignBreak(ServerPlayer player, LockRecord lock) {
+    private static boolean handleProtectedSignBreak(ServerPlayer player, LockRecord lock, LockState lockState) {
         if (isOwnerBanned(player, lock)) {
+            lockState.removeLock(lock);
+            PrivateChests.LOGGER.info("Protected sign at {} broken (owner banned), lock removed", lock.getSignPos());
             return true;
         }
 
-        if (AccessControlService.isAdmin(player)) {
-            PrivateChests.LOGGER.info("Admin {} broke protected sign at {}", player.getName().getString(), lock.getSignPos());
-            return true;
-        }
-
-        if (player.getUUID().equals(lock.getOwnerUuid())) {
+        boolean isAdmin = AccessControlService.isAdmin(player);
+        if (isAdmin || player.getUUID().equals(lock.getOwnerUuid())) {
+            lockState.removeLock(lock);
+            PrivateChests.LOGGER.info("{} {} broke protected sign at {}, lock removed",
+                isAdmin ? "Admin" : "Owner", player.getName().getString(), lock.getSignPos());
+            player.sendSystemMessage(Component.literal("Protection sign broken. Lock has been removed."));
             return true;
         }
 
