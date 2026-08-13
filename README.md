@@ -17,6 +17,7 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
   - Blocks chest placement next to locked containers (non-owners)
   - Prevents additional signs on locked containers
   - Blocks hopper and hopper-minecart extraction and insertion
+  - Blocks dropper insertion
   - Protects against TNT explosions
   - Prevents fire spread
 - **Bedrock Compatible**: Full support for Bedrock players via Floodgate/Geyser
