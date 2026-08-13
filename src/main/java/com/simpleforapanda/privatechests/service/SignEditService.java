@@ -322,21 +322,7 @@ public class SignEditService {
 
         Set<String> users = new HashSet<>();
         users.addAll(SignUtils.extractAllowedUsers(editedSideText));
-
-        boolean otherSideIsFront = !isEditingFront;
-        int startLine = SignUtils.containsProtectionMarker(signEntity, otherSideIsFront) ? 1 : 0;
-        for (int i = startLine; i < 4; i++) {
-            String line = signEntity.getText(otherSideIsFront).getMessage(i, false).getString().trim();
-            if (!line.isEmpty()) {
-                String[] parts = line.split(",");
-                for (String part : parts) {
-                    String username = part.trim();
-                    if (!username.isEmpty()) {
-                        users.add(username);
-                    }
-                }
-            }
-        }
+        users.addAll(SignUtils.extractAllowedUsers(signEntity, !isEditingFront));
 
         users.removeIf(name -> name.equalsIgnoreCase(ownerName));
         return users;
