@@ -16,6 +16,9 @@
 	"entrypoints": {
 		"main": [
 			"com.simpleforapanda.privatechests.PrivateChests"
+		],
+		"fabric-gametest": [
+			"com.simpleforapanda.privatechests.gametest.ProtectionGameTest"
 		]
 	},
 	"mixins": [
