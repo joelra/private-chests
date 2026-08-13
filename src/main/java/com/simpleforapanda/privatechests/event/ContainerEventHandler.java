@@ -38,7 +38,9 @@ public class ContainerEventHandler {
     }
 
     private static InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hitResult) {
-        if (level.isClientSide() || hand != InteractionHand.MAIN_HAND) {
+        // Both hands must be checked: sneak-placing from the off-hand would
+        // otherwise bypass the sign- and chest-placement restrictions below.
+        if (level.isClientSide()) {
             return InteractionResult.PASS;
         }
 
