@@ -15,8 +15,12 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.UserBanListEntry;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.level.block.WallSignBlock;
@@ -77,6 +81,35 @@ public class ProtectionGameTest {
             helper.fail("Stranger should be denied access to a locked chest");
             return;
         }
+
+        helper.succeed();
+    }
+
+    @GameTest
+    public void rightClickingLockedChestOnlyOpensForOwner(GameTestHelper helper) {
+        placeLockableChestWithSign(helper);
+
+        ServerPlayer owner = helper.makeMockServerPlayerInLevel();
+        editSign(helper, SIGN_REL, owner, "[private]");
+
+        // Use the full vanilla interaction pipeline, exactly as a right-click
+        // packet would, and check whether the chest screen actually opened.
+        BlockPos chestAbs = helper.absolutePos(CHEST_REL);
+        BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(chestAbs), Direction.NORTH, chestAbs, false);
+
+        ServerPlayer stranger = helper.makeMockServerPlayerInLevel();
+        stranger.gameMode.useItemOn(stranger, helper.getLevel(), ItemStack.EMPTY, InteractionHand.MAIN_HAND, hit);
+        if (stranger.containerMenu != stranger.inventoryMenu) {
+            helper.fail("Right-clicking a locked chest must not open it for a stranger");
+            return;
+        }
+
+        owner.gameMode.useItemOn(owner, helper.getLevel(), ItemStack.EMPTY, InteractionHand.MAIN_HAND, hit);
+        if (!(owner.containerMenu instanceof ChestMenu)) {
+            helper.fail("Right-clicking their own locked chest should open it for the owner");
+            return;
+        }
+        owner.closeContainer();
 
         helper.succeed();
     }
