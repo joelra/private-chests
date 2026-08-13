@@ -68,12 +68,9 @@ public class AccessControlService {
     }
 
     public static boolean hasAdminPermission(PermissionSet permissions) {
-        int level = PrivateChests.getConfig().getAdminPermissionLevel();
-        if (level <= 0) {
-            return true;
-        }
-
-        Permission requiredPermission = switch (level) {
+        // Config validation clamps the level to 1-4; anything else falls through
+        // to the strictest permission rather than granting everyone admin.
+        Permission requiredPermission = switch (PrivateChests.getConfig().getAdminPermissionLevel()) {
             case 1 -> Permissions.COMMANDS_MODERATOR;
             case 2 -> Permissions.COMMANDS_GAMEMASTER;
             case 3 -> Permissions.COMMANDS_ADMIN;
