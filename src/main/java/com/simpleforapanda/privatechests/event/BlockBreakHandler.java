@@ -53,7 +53,7 @@ public class BlockBreakHandler {
 
     private static boolean handleContainerBreak(ServerPlayer player, BlockPos pos, ServerLevel level, LockState lockState) {
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, pos);
-        Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+        Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
         if (lockOpt.isEmpty()) {
             return true;
         }
@@ -64,7 +64,7 @@ public class BlockBreakHandler {
         }
 
         if (player.getUUID().equals(lock.getOwnerUuid()) || AccessControlService.isAdmin(player)) {
-            lockState.removeLock(containerGroup.iterator().next());
+            lockState.removeLock(lock);
             PrivateChests.LOGGER.info("Player {} broke their locked container at {}, lock removed", player.getName().getString(), pos);
             player.sendSystemMessage(Component.literal("Locked container broken. Lock has been removed."));
             return true;
@@ -83,7 +83,7 @@ public class BlockBreakHandler {
     }
 
     private static boolean handleSignBreak(ServerPlayer player, Level level, BlockPos signPos, LockState lockState) {
-        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(signPos);
+        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(level, signPos);
         if (dormantSign.isPresent()) {
             return handleDormantSignBreak(player, dormantSign.get());
         }
@@ -94,7 +94,7 @@ public class BlockBreakHandler {
         }
 
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, attachedPos.get());
-        Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+        Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
         if (lockOpt.isPresent() && lockOpt.get().getSignPos().equals(signPos)) {
             return handleProtectedSignBreak(player, lockOpt.get());
         }

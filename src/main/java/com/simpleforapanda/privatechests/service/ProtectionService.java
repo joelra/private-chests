@@ -39,7 +39,7 @@ public class ProtectionService {
 
     private static boolean isContainerProtected(Level level, LockState lockState, BlockPos pos, MinecraftServer server) {
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, pos);
-        Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+        Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
         return lockOpt.isPresent() && !isOwnerBanned(server, lockOpt.get());
     }
 
@@ -50,7 +50,7 @@ public class ProtectionService {
         }
 
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, attachedPos.get());
-        Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+        Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
         return lockOpt.isPresent()
             && lockOpt.get().getSignPos().equals(signPos)
             && !isOwnerBanned(server, lockOpt.get());

@@ -32,7 +32,7 @@ public class AccessControlService {
         MinecraftServer server = serverLevel.getServer();
         LockState lockState = LockState.get(server);
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, containerPos);
-        Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+        Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
 
         if (lockOpt.isEmpty()) {
             return AccessResult.allow();
@@ -41,7 +41,7 @@ public class AccessControlService {
         LockRecord lock = lockOpt.get();
         if (!SignUtils.isValidProtectionSign(level, lock.getSignPos(), lock.getContainerPositions())) {
             PrivateChests.LOGGER.info("Removing dangling lock at {} - sign no longer valid", containerPos);
-            lockState.removeLock(containerGroup.iterator().next());
+            lockState.removeLock(lock);
             return AccessResult.allow();
         }
 

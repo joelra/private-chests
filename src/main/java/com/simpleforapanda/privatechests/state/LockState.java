@@ -5,11 +5,14 @@ import com.simpleforapanda.privatechests.PrivateChests;
 import com.simpleforapanda.privatechests.model.DormantSignRecord;
 import com.simpleforapanda.privatechests.model.LockRecord;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.level.storage.SavedDataStorage;
@@ -28,13 +31,14 @@ import java.util.UUID;
 /**
  * Manages all lock records for the server.
  * Persists lock data across server restarts.
+ * All positions are keyed per-dimension; the data itself is stored in the overworld's data storage.
  */
 public class LockState extends SavedData {
     private static final String FILE_NAME = "private_chests";
 
-    private final Map<BlockPos, LockRecord> locksByPosition = new HashMap<>();
+    private final Map<GlobalPos, LockRecord> locksByPosition = new HashMap<>();
     private final Map<UUID, Set<LockRecord>> locksByOwner = new HashMap<>();
-    private final Map<BlockPos, DormantSignRecord> dormantSignsByPosition = new HashMap<>();
+    private final Map<GlobalPos, DormantSignRecord> dormantSignsByPosition = new HashMap<>();
 
     public LockState() {
         super();
@@ -100,7 +104,7 @@ public class LockState extends SavedData {
             for (int i = 0; i < signList.size(); i++) {
                 signList.getCompound(i).ifPresent(signTag -> {
                     DormantSignRecord record = DormantSignRecord.fromNbt(signTag);
-                    state.dormantSignsByPosition.put(record.getSignPos(), record);
+                    state.dormantSignsByPosition.put(keyOf(record), record);
                 });
             }
         });
@@ -131,32 +135,33 @@ public class LockState extends SavedData {
         setDirty();
     }
 
-    public void removeLock(BlockPos containerPos) {
-        LockRecord record = locksByPosition.get(containerPos);
-        if (record != null) {
-            unindexRecord(record);
-            setDirty();
-        }
-    }
-
-    public void addDormantSign(DormantSignRecord record) {
-        dormantSignsByPosition.put(record.getSignPos(), record);
+    public void removeLock(LockRecord record) {
+        unindexRecord(record);
         setDirty();
     }
 
-    public void removeDormantSign(BlockPos signPos) {
-        if (dormantSignsByPosition.remove(signPos) != null) {
+    public void addDormantSign(DormantSignRecord record) {
+        dormantSignsByPosition.put(keyOf(record), record);
+        setDirty();
+    }
+
+    public void removeDormantSign(Level level, BlockPos signPos) {
+        removeDormantSign(level.dimension(), signPos);
+    }
+
+    public void removeDormantSign(ResourceKey<Level> dimension, BlockPos signPos) {
+        if (dormantSignsByPosition.remove(GlobalPos.of(dimension, signPos)) != null) {
             setDirty();
         }
     }
 
-    public Optional<LockRecord> getLock(BlockPos containerPos) {
-        return Optional.ofNullable(locksByPosition.get(containerPos));
+    public Optional<LockRecord> getLock(Level level, BlockPos containerPos) {
+        return Optional.ofNullable(locksByPosition.get(GlobalPos.of(level.dimension(), containerPos)));
     }
 
-    public Optional<LockRecord> getLock(Set<BlockPos> containerGroup) {
+    public Optional<LockRecord> getLock(Level level, Set<BlockPos> containerGroup) {
         for (BlockPos containerPos : containerGroup) {
-            Optional<LockRecord> lock = getLock(containerPos);
+            Optional<LockRecord> lock = getLock(level, containerPos);
             if (lock.isPresent()) {
                 return lock;
             }
@@ -164,12 +169,8 @@ public class LockState extends SavedData {
         return Optional.empty();
     }
 
-    public boolean isLocked(BlockPos containerPos) {
-        return locksByPosition.containsKey(containerPos);
-    }
-
-    public Optional<DormantSignRecord> getDormantSign(BlockPos signPos) {
-        return Optional.ofNullable(dormantSignsByPosition.get(signPos));
+    public Optional<DormantSignRecord> getDormantSign(Level level, BlockPos signPos) {
+        return Optional.ofNullable(dormantSignsByPosition.get(GlobalPos.of(level.dimension(), signPos)));
     }
 
     public Collection<LockRecord> getAllLocks() {
@@ -190,7 +191,7 @@ public class LockState extends SavedData {
         return ownerLocks != null ? ownerLocks.size() : 0;
     }
 
-    public List<LockRecord> getLocksInArea(BlockPos center, int chunkRadius) {
+    public List<LockRecord> getLocksInArea(ResourceKey<Level> dimension, BlockPos center, int chunkRadius) {
         int minX = (center.getX() >> 4) - chunkRadius;
         int maxX = (center.getX() >> 4) + chunkRadius;
         int minZ = (center.getZ() >> 4) - chunkRadius;
@@ -199,6 +200,9 @@ public class LockState extends SavedData {
         Set<LockRecord> uniqueLocks = new HashSet<>();
         for (Set<LockRecord> ownerLocks : locksByOwner.values()) {
             for (LockRecord record : ownerLocks) {
+                if (!record.getDimension().equals(dimension)) {
+                    continue;
+                }
                 for (BlockPos pos : record.getContainerPositions()) {
                     int chunkX = pos.getX() >> 4;
                     int chunkZ = pos.getZ() >> 4;
@@ -224,33 +228,33 @@ public class LockState extends SavedData {
         }
 
         for (LockRecord record : toRemove) {
-            removeLock(record.getContainerPositions().iterator().next());
+            removeLock(record);
         }
     }
 
     public void cleanupDanglingDormantSigns(java.util.function.Predicate<DormantSignRecord> isValid) {
-        List<BlockPos> toRemove = new ArrayList<>();
+        List<DormantSignRecord> toRemove = new ArrayList<>();
         for (DormantSignRecord record : dormantSignsByPosition.values()) {
             if (!isValid.test(record)) {
-                toRemove.add(record.getSignPos());
+                toRemove.add(record);
             }
         }
 
-        for (BlockPos signPos : toRemove) {
-            removeDormantSign(signPos);
+        for (DormantSignRecord record : toRemove) {
+            removeDormantSign(record.getDimension(), record.getSignPos());
         }
     }
 
     private void indexRecord(LockRecord record) {
         for (BlockPos pos : record.getContainerPositions()) {
-            locksByPosition.put(pos, record);
+            locksByPosition.put(GlobalPos.of(record.getDimension(), pos), record);
         }
         locksByOwner.computeIfAbsent(record.getOwnerUuid(), ignored -> new HashSet<>()).add(record);
     }
 
     private void unindexRecord(LockRecord record) {
         for (BlockPos pos : record.getContainerPositions()) {
-            locksByPosition.remove(pos);
+            locksByPosition.remove(GlobalPos.of(record.getDimension(), pos));
         }
 
         Set<LockRecord> ownerLocks = locksByOwner.get(record.getOwnerUuid());
@@ -260,5 +264,9 @@ public class LockState extends SavedData {
                 locksByOwner.remove(record.getOwnerUuid());
             }
         }
+    }
+
+    private static GlobalPos keyOf(DormantSignRecord record) {
+        return GlobalPos.of(record.getDimension(), record.getSignPos());
     }
 }

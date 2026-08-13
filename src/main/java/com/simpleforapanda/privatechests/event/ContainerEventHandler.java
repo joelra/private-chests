@@ -70,7 +70,7 @@ public class ContainerEventHandler {
         }
 
         if (heldItem.getItem() instanceof SignItem) {
-            Optional<LockRecord> lockOpt = lockState.getLock(ContainerUtils.getContainerGroup(level, clickedPos));
+            Optional<LockRecord> lockOpt = lockState.getLock(level, ContainerUtils.getContainerGroup(level, clickedPos));
             if (lockOpt.isPresent() && !canManageLock(serverPlayer, lockOpt.get())) {
                 serverPlayer.sendSystemMessage(Component.literal(
                     "You cannot place a sign on someone else's locked container."
@@ -96,8 +96,8 @@ public class ContainerEventHandler {
         }
 
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, attachedPos.get());
-        Optional<LockRecord> activeLock = lockState.getLock(containerGroup);
-        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(signPos);
+        Optional<LockRecord> activeLock = lockState.getLock(level, containerGroup);
+        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(level, signPos);
 
         if (activeLock.isPresent() && activeLock.get().getSignPos().equals(signPos) && !canManageLock(player, activeLock.get())) {
             player.sendSystemMessage(Component.literal("You cannot edit someone else's protected sign."));
@@ -135,7 +135,7 @@ public class ContainerEventHandler {
                 continue;
             }
 
-            Optional<LockRecord> lockOpt = lockState.getLock(ContainerUtils.getContainerGroup(level, adjacentPos));
+            Optional<LockRecord> lockOpt = lockState.getLock(level, ContainerUtils.getContainerGroup(level, adjacentPos));
             if (lockOpt.isEmpty()) {
                 continue;
             }
@@ -168,6 +168,7 @@ public class ContainerEventHandler {
 
         if (newContainerGroup.size() > existingLock.getContainerPositions().size()) {
             LockRecord updatedLock = new LockRecord(
+                existingLock.getDimension(),
                 existingLock.getOwnerUuid(),
                 existingLock.getOwnerName(),
                 existingLock.getSignPos(),
@@ -178,7 +179,7 @@ public class ContainerEventHandler {
                 System.currentTimeMillis()
             );
 
-            lockState.removeLock(existingLock.getContainerPositions().iterator().next());
+            lockState.removeLock(existingLock);
             lockState.addLock(updatedLock);
 
             PrivateChests.LOGGER.info(

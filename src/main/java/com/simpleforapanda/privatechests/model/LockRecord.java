@@ -1,8 +1,12 @@
 package com.simpleforapanda.privatechests.model;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -15,6 +19,7 @@ import java.util.UUID;
  * Stores ownership, access mode, allowed users, and positions of the container and sign.
  */
 public class LockRecord {
+    private final ResourceKey<Level> dimension;
     private final UUID ownerUuid;
     private final String ownerName;
     private final BlockPos signPos;
@@ -25,6 +30,7 @@ public class LockRecord {
     private final long lastUpdatedAt;
 
     public LockRecord(
+        ResourceKey<Level> dimension,
         UUID ownerUuid,
         String ownerName,
         BlockPos signPos,
@@ -32,10 +38,11 @@ public class LockRecord {
         AccessMode accessMode,
         Set<String> allowedUsers
     ) {
-        this(ownerUuid, ownerName, signPos, containerPositions, accessMode, allowedUsers, System.currentTimeMillis(), System.currentTimeMillis());
+        this(dimension, ownerUuid, ownerName, signPos, containerPositions, accessMode, allowedUsers, System.currentTimeMillis(), System.currentTimeMillis());
     }
 
     public LockRecord(
+        ResourceKey<Level> dimension,
         UUID ownerUuid,
         String ownerName,
         BlockPos signPos,
@@ -45,6 +52,7 @@ public class LockRecord {
         long createdAt,
         long lastUpdatedAt
     ) {
+        this.dimension = dimension;
         this.ownerUuid = ownerUuid;
         this.ownerName = ownerName;
         this.signPos = signPos;
@@ -53,6 +61,10 @@ public class LockRecord {
         this.allowedUsers = new HashSet<>(allowedUsers);
         this.createdAt = createdAt;
         this.lastUpdatedAt = lastUpdatedAt;
+    }
+
+    public ResourceKey<Level> getDimension() {
+        return dimension;
     }
 
     public UUID getOwnerUuid() {
@@ -120,6 +132,7 @@ public class LockRecord {
     public CompoundTag toNbt() {
         CompoundTag tag = new CompoundTag();
 
+        tag.putString("Dimension", dimension.identifier().toString());
         tag.putLong("OwnerMost", ownerUuid.getMostSignificantBits());
         tag.putLong("OwnerLeast", ownerUuid.getLeastSignificantBits());
         tag.putString("OwnerName", ownerName);
@@ -153,6 +166,11 @@ public class LockRecord {
     }
 
     public static LockRecord fromNbt(CompoundTag tag) {
+        // Records saved before dimension support were only reachable in the overworld
+        ResourceKey<Level> dimension = tag.getString("Dimension")
+            .map(Identifier::tryParse)
+            .map(id -> ResourceKey.create(Registries.DIMENSION, id))
+            .orElse(Level.OVERWORLD);
         UUID ownerUuid = new UUID(
             tag.getLong("OwnerMost").orElse(0L),
             tag.getLong("OwnerLeast").orElse(0L)
@@ -197,14 +215,15 @@ public class LockRecord {
         long createdAt = tag.getLong("CreatedAt").orElse(0L);
         long lastUpdatedAt = tag.getLong("LastUpdatedAt").orElse(0L);
 
-        return new LockRecord(ownerUuid, ownerName, signPos, containerPositions, accessMode, allowedUsers, createdAt, lastUpdatedAt);
+        return new LockRecord(dimension, ownerUuid, ownerName, signPos, containerPositions, accessMode, allowedUsers, createdAt, lastUpdatedAt);
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof LockRecord that)) return false;
-        return Objects.equals(ownerUuid, that.ownerUuid)
+        return Objects.equals(dimension, that.dimension)
+            && Objects.equals(ownerUuid, that.ownerUuid)
             && Objects.equals(signPos, that.signPos)
             && Objects.equals(containerPositions, that.containerPositions)
             && accessMode == that.accessMode
@@ -213,13 +232,14 @@ public class LockRecord {
 
     @Override
     public int hashCode() {
-        return Objects.hash(ownerUuid, signPos, containerPositions, accessMode, allowedUsers);
+        return Objects.hash(dimension, ownerUuid, signPos, containerPositions, accessMode, allowedUsers);
     }
 
     @Override
     public String toString() {
         return "LockRecord{"
-            + "ownerUuid=" + ownerUuid
+            + "dimension=" + dimension.identifier()
+            + ", ownerUuid=" + ownerUuid
             + ", signPos=" + signPos
             + ", containerPositions=" + containerPositions
             + ", accessMode=" + accessMode

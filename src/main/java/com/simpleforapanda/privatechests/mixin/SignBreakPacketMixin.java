@@ -84,7 +84,7 @@ public abstract class SignBreakPacketMixin {
         }
 
         LockState lockState = LockState.get(serverLevel.getServer());
-        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(signPos);
+        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(level, signPos);
         if (dormantSign.isPresent()) {
             return !player.getUUID().equals(dormantSign.get().getOwnerUuid()) && !AccessControlService.isAdmin(player);
         }
@@ -95,7 +95,7 @@ public abstract class SignBreakPacketMixin {
         }
 
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, attachedPos.get());
-        Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+        Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
         if (lockOpt.isPresent() && lockOpt.get().getSignPos().equals(signPos)) {
             boolean isOwner = player.getUUID().equals(lockOpt.get().getOwnerUuid());
             boolean isAdmin = AccessControlService.isAdmin(player);
