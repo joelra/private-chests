@@ -13,12 +13,11 @@ import java.nio.file.Path;
  */
 public class ModConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static ModConfig instance;
 
     // Floodgate prefix for Bedrock players (commonly ".")
     public String floodgatePrefix = ".";
 
-    // Admin permission level (2 = operator can break blocks, 3 = operator can use commands)
+    // Permission level required for admin lock bypass and commands (1-4)
     public int adminPermissionLevel = 3;
 
     // Maximum number of entries to show in /private_chests list before abbreviating
@@ -38,36 +37,46 @@ public class ModConfig {
      */
     public static ModConfig load(Path configPath) {
         Path configFile = configPath.resolve("private-chests.json");
+        ModConfig config;
 
         if (Files.exists(configFile)) {
             try {
                 String json = Files.readString(configFile);
-                instance = GSON.fromJson(json, ModConfig.class);
-                PrivateChests.LOGGER.info("Loaded configuration from {}", configFile);
-            } catch (IOException e) {
+                config = GSON.fromJson(json, ModConfig.class);
+                if (config == null) {
+                    PrivateChests.LOGGER.warn("Configuration file {} is empty, using defaults", configFile);
+                    config = new ModConfig();
+                } else {
+                    PrivateChests.LOGGER.info("Loaded configuration from {}", configFile);
+                }
+            } catch (Exception e) {
                 PrivateChests.LOGGER.error("Failed to load configuration, using defaults", e);
-                instance = new ModConfig();
+                config = new ModConfig();
             }
         } else {
             PrivateChests.LOGGER.info("Configuration file not found, creating default at {}", configFile);
-            instance = new ModConfig();
-            instance.save(configPath);
+            config = new ModConfig();
+            config.save(configPath);
         }
 
         // Validate and fix invalid values
-        instance.validate();
+        if (config.validate()) {
+            PrivateChests.LOGGER.info("Configuration had invalid values, saving corrected version");
+            config.save(configPath);
+        }
 
-        return instance;
+        return config;
     }
 
     /**
      * Validate configuration values and fix any invalid settings.
+     * Returns true if any value had to be corrected.
      */
-    private void validate() {
+    boolean validate() {
         boolean needsSave = false;
 
-        if (adminPermissionLevel < 0 || adminPermissionLevel > 4) {
-            PrivateChests.LOGGER.warn("Invalid adminPermissionLevel ({}), must be 0-4. Using default: 3", adminPermissionLevel);
+        if (adminPermissionLevel < 1 || adminPermissionLevel > 4) {
+            PrivateChests.LOGGER.warn("Invalid adminPermissionLevel ({}), must be 1-4. Using default: 3", adminPermissionLevel);
             adminPermissionLevel = 3;
             needsSave = true;
         }
@@ -97,10 +106,7 @@ public class ModConfig {
             needsSave = true;
         }
 
-        if (needsSave) {
-            PrivateChests.LOGGER.info("Configuration had invalid values, saving corrected version");
-            save(net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir());
-        }
+        return needsSave;
     }
 
     /**
@@ -117,16 +123,6 @@ public class ModConfig {
         } catch (IOException e) {
             PrivateChests.LOGGER.error("Failed to save configuration", e);
         }
-    }
-
-    /**
-     * Get the current configuration instance.
-     */
-    public static ModConfig getInstance() {
-        if (instance == null) {
-            throw new IllegalStateException("Configuration not loaded yet!");
-        }
-        return instance;
     }
 
     public String getFloodgatePrefix() {

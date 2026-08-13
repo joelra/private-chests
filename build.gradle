@@ -28,6 +28,15 @@ loom {
 		}
 	}
 
+	runs {
+		gametest {
+			server()
+			name "Game Test"
+			vmArg "-Dfabric-api.gametest"
+			vmArg "-Dfabric-api.gametest.report-file=${project.layout.buildDirectory.get()}/junit-gametest.xml"
+			runDir "build/gametest"
+		}
+	}
 }
 
 dependencies {
@@ -37,7 +46,15 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-	
+
+	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
+}
+
+test {
+	useJUnitPlatform()
+	testLogging {
+		events "passed", "failed", "skipped"
+	}
 }
 
 processResources {

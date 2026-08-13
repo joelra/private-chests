@@ -36,7 +36,7 @@ public class AutomationBlockService {
         LockState lockState = LockState.get(server);
 
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, pos);
-        Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+        Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
         if (lockOpt.isEmpty()) {
             return false; // Not locked, allow automation
         }

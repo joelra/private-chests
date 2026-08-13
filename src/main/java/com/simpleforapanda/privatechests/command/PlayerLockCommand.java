@@ -123,7 +123,7 @@ public class PlayerLockCommand {
                 return 0;
             }
 
-            Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+            Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
 
             if (lockOpt.isEmpty()) {
                 source.sendFailure(Component.literal("No lock found at " + ContainerUtils.positionToString(pos)));
@@ -192,7 +192,7 @@ public class PlayerLockCommand {
                 return 0;
             }
 
-            Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+            Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
 
             if (lockOpt.isEmpty()) {
                 source.sendFailure(Component.literal("No lock found at " + ContainerUtils.positionToString(pos)));
@@ -228,6 +228,7 @@ public class PlayerLockCommand {
 
             // Build the transferred lock record
             LockRecord transferredLock = new LockRecord(
+                lock.getDimension(),
                 targetPlayer.getUUID(),
                 targetPlayer.getName().getString(),
                 lock.getSignPos(),
@@ -238,7 +239,7 @@ public class PlayerLockCommand {
                 System.currentTimeMillis()
             );
 
-            lockState.removeLock(lock.getContainerPositions().iterator().next());
+            lockState.removeLock(lock);
             lockState.addLock(transferredLock);
 
             PrivateChests.LOGGER.info("Player {} transferred lock at {} to {}",

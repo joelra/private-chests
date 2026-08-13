@@ -3,15 +3,14 @@ package com.simpleforapanda.privatechests.util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.*;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.BarrelBlock;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.ChestType;
 
 import java.util.HashSet;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -71,14 +70,6 @@ public class ContainerUtils {
         }
 
         return group;
-    }
-
-    /**
-     * Check if two positions are part of the same double chest.
-     */
-    public static boolean arePartOfSameDoubleChest(Level level, BlockPos pos1, BlockPos pos2) {
-        Set<BlockPos> group = getContainerGroup(level, pos1);
-        return group.contains(pos2);
     }
 
     /**

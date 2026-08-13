@@ -5,6 +5,7 @@
 	"mixins": [
 		"SignBreakPacketMixin",
 		"HopperBlockMixin",
+		"DropperBlockMixin",
 		"ExplosionMixin",
 		"FireBlockMixin"
 	],

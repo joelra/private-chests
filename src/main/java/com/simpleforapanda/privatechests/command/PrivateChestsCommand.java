@@ -119,14 +119,14 @@ public class PrivateChestsCommand {
             }
 
             // Check if locked
-            Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+            Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
             if (lockOpt.isEmpty()) {
                 source.sendFailure(Component.literal("No lock found at " + ContainerUtils.positionToString(pos)));
                 return 0;
             }
 
             // Remove lock
-            lockState.removeLock(containerGroup.iterator().next());
+            lockState.removeLock(lockOpt.get());
 
             String containerType = ContainerUtils.getContainerTypeName(level, containerGroup);
             source.sendSuccess(() -> Component.literal(
@@ -163,7 +163,7 @@ public class PrivateChestsCommand {
         }
 
         for (LockRecord lock : toRemove) {
-            lockState.removeLock(lock.getContainerPositions().iterator().next());
+            lockState.removeLock(lock);
         }
 
         int removed = toRemove.size();
@@ -225,16 +225,16 @@ public class PrivateChestsCommand {
         CommandSourceStack source = ctx.getSource();
         MinecraftServer server = source.getServer();
         LockState lockState = LockState.get(server);
-        ServerLevel overworld = server.overworld();
 
         int[] removedLockCount = {0};
         lockState.cleanupDanglingLocks(record -> {
             BlockPos signPos = record.getSignPos();
-            // Only validate if the chunk is currently loaded
-            if (!overworld.isLoaded(signPos)) {
+            ServerLevel level = server.getLevel(record.getDimension());
+            // Only validate if the record's dimension exists and the chunk is currently loaded
+            if (level == null || !level.isLoaded(signPos)) {
                 return true; // assume valid if not loaded
             }
-            boolean valid = SignUtils.isValidProtectionSign(overworld, signPos, record.getContainerPositions());
+            boolean valid = SignUtils.isValidProtectionSign(level, signPos, record.getContainerPositions());
             if (!valid) {
                 removedLockCount[0]++;
             }
@@ -242,7 +242,7 @@ public class PrivateChestsCommand {
         });
 
         int[] removedDormantCount = {0};
-        lockState.cleanupDanglingDormantSigns(record -> isValidDormantSign(overworld, record, removedDormantCount));
+        lockState.cleanupDanglingDormantSigns(record -> isValidDormantSign(server, record, removedDormantCount));
 
         int removed = removedLockCount[0] + removedDormantCount[0];
         source.sendSuccess(() -> Component.literal(
@@ -327,7 +327,7 @@ public class PrivateChestsCommand {
             }
 
             // Check if locked
-            Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+            Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
             if (lockOpt.isEmpty()) {
                 source.sendFailure(Component.literal("No lock found at " + ContainerUtils.positionToString(pos)));
                 return 0;
@@ -384,7 +384,7 @@ public class PrivateChestsCommand {
         LockState lockState = LockState.get(server);
         BlockPos centerPos = player.blockPosition();
 
-        List<LockRecord> locks = lockState.getLocksInArea(centerPos, chunkRadius);
+        List<LockRecord> locks = lockState.getLocksInArea(player.level().dimension(), centerPos, chunkRadius);
         if (modeFilter != null) {
             locks = locks.stream().filter(lock -> lock.getAccessMode() == modeFilter).toList();
         }
@@ -416,24 +416,30 @@ public class PrivateChestsCommand {
     private static void sendLockInfo(CommandSourceStack source, LockRecord lock, MinecraftServer server) {
         String ownerName = AccessControlService.getOwnerName(server, lock);
 
-        ServerLevel level = source.getLevel();
-        String containerType = ContainerUtils.getContainerTypeName(level, lock.getContainerPositions());
+        ServerLevel lockLevel = server.getLevel(lock.getDimension());
+        String containerType = lockLevel != null
+            ? ContainerUtils.getContainerTypeName(lockLevel, lock.getContainerPositions())
+            : "Container";
         String position = ContainerUtils.positionToString(ContainerUtils.getPrimaryPosition(lock.getContainerPositions()));
+        String dimensionSuffix = lock.getDimension().equals(net.minecraft.world.level.Level.OVERWORLD)
+            ? ""
+            : " (" + lock.getDimension().identifier() + ")";
 
         source.sendSuccess(() -> Component.literal(
-            "- " + containerType + " at " + position + " | Owner: " + ownerName + " | Mode: " + lock.getAccessMode().name().toLowerCase()
+            "- " + containerType + " at " + position + dimensionSuffix + " | Owner: " + ownerName + " | Mode: " + lock.getAccessMode().name().toLowerCase()
         ), false);
     }
 
-    private static boolean isValidDormantSign(ServerLevel overworld, DormantSignRecord record, int[] removedDormantCount) {
+    private static boolean isValidDormantSign(MinecraftServer server, DormantSignRecord record, int[] removedDormantCount) {
         BlockPos signPos = record.getSignPos();
-        if (!overworld.isLoaded(signPos)) {
+        ServerLevel level = server.getLevel(record.getDimension());
+        if (level == null || !level.isLoaded(signPos)) {
             return true;
         }
 
-        boolean valid = SignUtils.isProtectionSign(overworld, signPos)
-            && SignUtils.getAttachedBlock(overworld, signPos)
-                .map(attachedPos -> !ContainerUtils.getContainerGroup(overworld, attachedPos).isEmpty())
+        boolean valid = SignUtils.isProtectionSign(level, signPos)
+            && SignUtils.getAttachedBlock(level, signPos)
+                .map(attachedPos -> !ContainerUtils.getContainerGroup(level, attachedPos).isEmpty())
                 .orElse(false);
 
         if (!valid) {

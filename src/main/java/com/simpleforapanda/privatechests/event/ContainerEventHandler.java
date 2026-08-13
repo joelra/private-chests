@@ -38,7 +38,9 @@ public class ContainerEventHandler {
     }
 
     private static InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hitResult) {
-        if (level.isClientSide() || hand != InteractionHand.MAIN_HAND) {
+        // Both hands must be checked: sneak-placing from the off-hand would
+        // otherwise bypass the sign- and chest-placement restrictions below.
+        if (level.isClientSide()) {
             return InteractionResult.PASS;
         }
 
@@ -70,7 +72,7 @@ public class ContainerEventHandler {
         }
 
         if (heldItem.getItem() instanceof SignItem) {
-            Optional<LockRecord> lockOpt = lockState.getLock(ContainerUtils.getContainerGroup(level, clickedPos));
+            Optional<LockRecord> lockOpt = lockState.getLock(level, ContainerUtils.getContainerGroup(level, clickedPos));
             if (lockOpt.isPresent() && !canManageLock(serverPlayer, lockOpt.get())) {
                 serverPlayer.sendSystemMessage(Component.literal(
                     "You cannot place a sign on someone else's locked container."
@@ -96,8 +98,8 @@ public class ContainerEventHandler {
         }
 
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, attachedPos.get());
-        Optional<LockRecord> activeLock = lockState.getLock(containerGroup);
-        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(signPos);
+        Optional<LockRecord> activeLock = lockState.getLock(level, containerGroup);
+        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(level, signPos);
 
         if (activeLock.isPresent() && activeLock.get().getSignPos().equals(signPos) && !canManageLock(player, activeLock.get())) {
             player.sendSystemMessage(Component.literal("You cannot edit someone else's protected sign."));
@@ -135,7 +137,7 @@ public class ContainerEventHandler {
                 continue;
             }
 
-            Optional<LockRecord> lockOpt = lockState.getLock(ContainerUtils.getContainerGroup(level, adjacentPos));
+            Optional<LockRecord> lockOpt = lockState.getLock(level, ContainerUtils.getContainerGroup(level, adjacentPos));
             if (lockOpt.isEmpty()) {
                 continue;
             }
@@ -150,7 +152,13 @@ public class ContainerEventHandler {
             }
 
             if (level instanceof ServerLevel serverLevel) {
-                serverLevel.getServer().execute(() -> updateLockForExtendedChest(serverLevel, placementPos, lock));
+                // server.execute would run inline (we are on the server thread) and
+                // see the world before vanilla places the chest; defer a full tick.
+                var server = serverLevel.getServer();
+                server.schedule(new net.minecraft.server.TickTask(
+                    server.getTickCount() + 1,
+                    () -> updateLockForExtendedChest(serverLevel, placementPos, lock)
+                ));
             }
         }
 
@@ -168,6 +176,7 @@ public class ContainerEventHandler {
 
         if (newContainerGroup.size() > existingLock.getContainerPositions().size()) {
             LockRecord updatedLock = new LockRecord(
+                existingLock.getDimension(),
                 existingLock.getOwnerUuid(),
                 existingLock.getOwnerName(),
                 existingLock.getSignPos(),
@@ -178,7 +187,7 @@ public class ContainerEventHandler {
                 System.currentTimeMillis()
             );
 
-            lockState.removeLock(existingLock.getContainerPositions().iterator().next());
+            lockState.removeLock(existingLock);
             lockState.addLock(updatedLock);
 
             PrivateChests.LOGGER.info(

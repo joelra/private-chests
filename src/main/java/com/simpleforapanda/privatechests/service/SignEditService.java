@@ -60,8 +60,8 @@ public class SignEditService {
         }
 
         Optional<AccessMode> resultingMode = editedMode.isPresent() ? editedMode : otherMode;
-        Optional<LockRecord> existingLock = lockState.getLock(containerGroup);
-        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(signPos);
+        Optional<LockRecord> existingLock = lockState.getLock(serverLevel, containerGroup);
+        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(serverLevel, signPos);
 
         if (existingLock.isPresent()) {
             return handleExistingProtection(player, signPos, signEntity, newLines, isFrontText, containerGroup, existingLock.get(), dormantSign, lockState, resultingMode);
@@ -76,24 +76,24 @@ public class SignEditService {
         }
 
         LockState lockState = LockState.get(serverLevel.getServer());
-        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(signPos);
+        Optional<DormantSignRecord> dormantSign = lockState.getDormantSign(level, signPos);
         if (dormantSign.isEmpty() || !canManageDormantSign(player, dormantSign.get())) {
             return false;
         }
 
         Optional<BlockPos> attachedPos = SignUtils.getAttachedBlock(level, signPos);
         if (attachedPos.isEmpty()) {
-            lockState.removeDormantSign(signPos);
+            lockState.removeDormantSign(level, signPos);
             return false;
         }
 
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, attachedPos.get());
-        if (containerGroup.isEmpty() || lockState.getLock(containerGroup).isPresent()) {
+        if (containerGroup.isEmpty() || lockState.getLock(level, containerGroup).isPresent()) {
             return false;
         }
 
         if (!(level.getBlockEntity(signPos) instanceof SignBlockEntity signEntity)) {
-            lockState.removeDormantSign(signPos);
+            lockState.removeDormantSign(level, signPos);
             return false;
         }
 
@@ -105,7 +105,7 @@ public class SignEditService {
 
         Optional<AccessMode> mode = frontMode.isPresent() ? frontMode : backMode;
         if (mode.isEmpty()) {
-            lockState.removeDormantSign(signPos);
+            lockState.removeDormantSign(level, signPos);
             return false;
         }
 
@@ -147,6 +147,7 @@ public class SignEditService {
 
         if (resultingMode.isPresent()) {
             DormantSignRecord record = dormantSign.orElseGet(() -> new DormantSignRecord(
+                player.level().dimension(),
                 player.getUUID(),
                 player.getName().getString(),
                 signPos
@@ -158,7 +159,7 @@ public class SignEditService {
                 ));
             }
         } else if (dormantSign.isPresent()) {
-            lockState.removeDormantSign(signPos);
+            lockState.removeDormantSign(player.level(), signPos);
         }
 
         return true;
@@ -186,7 +187,7 @@ public class SignEditService {
                 player.getName().getString(),
                 signPos
             );
-            lockState.removeLock(containerGroup.iterator().next());
+            lockState.removeLock(existingLock);
             player.sendSystemMessage(Component.literal("Protection removed from container."));
             return true;
         }
@@ -197,6 +198,7 @@ public class SignEditService {
         }
 
         LockRecord updatedLock = new LockRecord(
+            existingLock.getDimension(),
             existingLock.getOwnerUuid(),
             existingLock.getOwnerName(),
             existingLock.getSignPos(),
@@ -207,7 +209,7 @@ public class SignEditService {
             System.currentTimeMillis()
         );
 
-        lockState.removeLock(containerGroup.iterator().next());
+        lockState.removeLock(existingLock);
         lockState.addLock(updatedLock);
 
         PrivateChests.LOGGER.info("Player {} updated protection at {}", player.getName().getString(), signPos);
@@ -234,7 +236,7 @@ public class SignEditService {
             }
 
             if (resultingMode.isEmpty()) {
-                lockState.removeDormantSign(signPos);
+                lockState.removeDormantSign(player.level(), signPos);
                 return true;
             }
 
@@ -297,10 +299,10 @@ public class SignEditService {
         }
 
         Set<String> allowedUsers = extractAllowedUsers(accessMode, ownerName, signEntity, newLines, isFrontText);
-        LockRecord newLock = new LockRecord(ownerUuid, ownerName, signPos, containerGroup, accessMode, allowedUsers);
+        LockRecord newLock = new LockRecord(actor.level().dimension(), ownerUuid, ownerName, signPos, containerGroup, accessMode, allowedUsers);
 
         lockState.addLock(newLock);
-        lockState.removeDormantSign(signPos);
+        lockState.removeDormantSign(actor.level(), signPos);
 
         PrivateChests.LOGGER.info("Player {} created new protection at {}", actor.getName().getString(), signPos);
         actor.sendSystemMessage(Component.literal(messageForCreatedLock(newLock)));
@@ -320,21 +322,7 @@ public class SignEditService {
 
         Set<String> users = new HashSet<>();
         users.addAll(SignUtils.extractAllowedUsers(editedSideText));
-
-        boolean otherSideIsFront = !isEditingFront;
-        int startLine = SignUtils.containsProtectionMarker(signEntity, otherSideIsFront) ? 1 : 0;
-        for (int i = startLine; i < 4; i++) {
-            String line = signEntity.getText(otherSideIsFront).getMessage(i, false).getString().trim();
-            if (!line.isEmpty()) {
-                String[] parts = line.split(",");
-                for (String part : parts) {
-                    String username = part.trim();
-                    if (!username.isEmpty()) {
-                        users.add(username);
-                    }
-                }
-            }
-        }
+        users.addAll(SignUtils.extractAllowedUsers(signEntity, !isEditingFront));
 
         users.removeIf(name -> name.equalsIgnoreCase(ownerName));
         return users;

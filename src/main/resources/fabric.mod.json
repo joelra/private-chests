@@ -16,6 +16,12 @@
 	"entrypoints": {
 		"main": [
 			"com.simpleforapanda.privatechests.PrivateChests"
+		],
+		"fabric-gametest": [
+			"com.simpleforapanda.privatechests.gametest.ProtectionGameTest",
+			"com.simpleforapanda.privatechests.gametest.ContainerTypesGameTest",
+			"com.simpleforapanda.privatechests.gametest.BreakProtectionGameTest",
+			"com.simpleforapanda.privatechests.gametest.PlacementRestrictionGameTest"
 		]
 	},
 	"mixins": [

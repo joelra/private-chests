@@ -32,7 +32,7 @@ public class AccessControlService {
         MinecraftServer server = serverLevel.getServer();
         LockState lockState = LockState.get(server);
         Set<BlockPos> containerGroup = ContainerUtils.getContainerGroup(level, containerPos);
-        Optional<LockRecord> lockOpt = lockState.getLock(containerGroup);
+        Optional<LockRecord> lockOpt = lockState.getLock(level, containerGroup);
 
         if (lockOpt.isEmpty()) {
             return AccessResult.allow();
@@ -41,7 +41,7 @@ public class AccessControlService {
         LockRecord lock = lockOpt.get();
         if (!SignUtils.isValidProtectionSign(level, lock.getSignPos(), lock.getContainerPositions())) {
             PrivateChests.LOGGER.info("Removing dangling lock at {} - sign no longer valid", containerPos);
-            lockState.removeLock(containerGroup.iterator().next());
+            lockState.removeLock(lock);
             return AccessResult.allow();
         }
 
@@ -68,12 +68,9 @@ public class AccessControlService {
     }
 
     public static boolean hasAdminPermission(PermissionSet permissions) {
-        int level = PrivateChests.getConfig().getAdminPermissionLevel();
-        if (level <= 0) {
-            return true;
-        }
-
-        Permission requiredPermission = switch (level) {
+        // Config validation clamps the level to 1-4; anything else falls through
+        // to the strictest permission rather than granting everyone admin.
+        Permission requiredPermission = switch (PrivateChests.getConfig().getAdminPermissionLevel()) {
             case 1 -> Permissions.COMMANDS_MODERATOR;
             case 2 -> Permissions.COMMANDS_GAMEMASTER;
             case 3 -> Permissions.COMMANDS_ADMIN;
