@@ -156,12 +156,20 @@ public class LockState extends SavedData {
     }
 
     public Optional<LockRecord> getLock(Level level, BlockPos containerPos) {
-        return Optional.ofNullable(locksByPosition.get(GlobalPos.of(level.dimension(), containerPos)));
+        return getLock(level.dimension(), containerPos);
+    }
+
+    public Optional<LockRecord> getLock(ResourceKey<Level> dimension, BlockPos containerPos) {
+        return Optional.ofNullable(locksByPosition.get(GlobalPos.of(dimension, containerPos)));
     }
 
     public Optional<LockRecord> getLock(Level level, Set<BlockPos> containerGroup) {
+        return getLock(level.dimension(), containerGroup);
+    }
+
+    public Optional<LockRecord> getLock(ResourceKey<Level> dimension, Set<BlockPos> containerGroup) {
         for (BlockPos containerPos : containerGroup) {
-            Optional<LockRecord> lock = getLock(level, containerPos);
+            Optional<LockRecord> lock = getLock(dimension, containerPos);
             if (lock.isPresent()) {
                 return lock;
             }
@@ -170,7 +178,11 @@ public class LockState extends SavedData {
     }
 
     public Optional<DormantSignRecord> getDormantSign(Level level, BlockPos signPos) {
-        return Optional.ofNullable(dormantSignsByPosition.get(GlobalPos.of(level.dimension(), signPos)));
+        return getDormantSign(level.dimension(), signPos);
+    }
+
+    public Optional<DormantSignRecord> getDormantSign(ResourceKey<Level> dimension, BlockPos signPos) {
+        return Optional.ofNullable(dormantSignsByPosition.get(GlobalPos.of(dimension, signPos)));
     }
 
     public Collection<LockRecord> getAllLocks() {

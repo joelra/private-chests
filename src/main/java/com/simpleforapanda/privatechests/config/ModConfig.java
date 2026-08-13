@@ -60,15 +60,19 @@ public class ModConfig {
         }
 
         // Validate and fix invalid values
-        config.validate();
+        if (config.validate()) {
+            PrivateChests.LOGGER.info("Configuration had invalid values, saving corrected version");
+            config.save(configPath);
+        }
 
         return config;
     }
 
     /**
      * Validate configuration values and fix any invalid settings.
+     * Returns true if any value had to be corrected.
      */
-    private void validate() {
+    boolean validate() {
         boolean needsSave = false;
 
         if (adminPermissionLevel < 1 || adminPermissionLevel > 4) {
@@ -102,10 +106,7 @@ public class ModConfig {
             needsSave = true;
         }
 
-        if (needsSave) {
-            PrivateChests.LOGGER.info("Configuration had invalid values, saving corrected version");
-            save(net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir());
-        }
+        return needsSave;
     }
 
     /**
