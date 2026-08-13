@@ -3,7 +3,7 @@
 A server-side Minecraft mod for protecting chests and barrels using wall signs with `[private]` and `[public]` markers.
 
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](LICENSE)
-[![Minecraft](https://img.shields.io/badge/Minecraft-26.1.1-green.svg)](https://www.minecraft.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-26.2-green.svg)](https://www.minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Mod%20Loader-Fabric-orange.svg)](https://fabricmc.net/)
 
 ## Features
@@ -16,10 +16,9 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
   - Prevents unauthorized opening
   - Blocks chest placement next to locked containers (non-owners)
   - Prevents additional signs on locked containers
-  - Blocks hopper placement and extraction
+  - Blocks hopper and hopper-minecart extraction and insertion
   - Protects against TNT explosions
   - Prevents fire spread
-  - Blocks piston movement
 - **Bedrock Compatible**: Full support for Bedrock players via Floodgate/Geyser
 - **Admin Tools**: Commands for managing locks and viewing protection info
 - **Server-Side Only**: No client mod required
@@ -74,6 +73,27 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
 - Only the sign owner or an admin can edit or remove a `[public]` sign
 - Extra protection signs placed on an already-protected container stay dormant until the current protection is gone and that sign's owner reactivates it
 
+## Player Commands
+
+### `/lock`
+
+Available to every player:
+
+```
+/lock list
+```
+List all containers you have locked, with their mode and allowed users.
+
+```
+/lock info <x> <y> <z>
+```
+Show details about a lock. Only the lock's owner (or an admin) may view it.
+
+```
+/lock transfer <player> <x> <y> <z>
+```
+Transfer ownership of one of your locks to another (online) player.
+
 ## Admin Commands
 
 All commands require admin permission level 3 (configurable).
@@ -122,17 +142,19 @@ Config file: `config/private-chests.json`
   "adminPermissionLevel": 3,
   "listMaxEntries": 50,
   "listPreviewEntries": 20,
-  "disableProtectionIfOwnerBanned": true
+  "disableProtectionIfOwnerBanned": true,
+  "maxLocksPerPlayer": 0
 }
 ```
 
 ### Options
 
 - **floodgatePrefix**: Prefix for Bedrock players (default: `.`)
-- **adminPermissionLevel**: Permission level to bypass locks and use commands (0-4, default: 3)
+- **adminPermissionLevel**: Permission level to bypass locks and use commands (1-4, default: 3)
 - **listMaxEntries**: Max locks shown in `/list` before abbreviating (default: 50)
 - **listPreviewEntries**: Number shown when abbreviated (default: 20)
 - **disableProtectionIfOwnerBanned**: Remove protection if owner is banned (default: true)
+- **maxLocksPerPlayer**: Maximum containers a single player may lock, 0 = unlimited (default: 0)
 
 Invalid values are auto-corrected on startup.
 
@@ -146,8 +168,14 @@ Fully compatible with Floodgate/Geyser for Bedrock players:
 ## Technical Details
 
 - **Server-side only**: No client mod needed
-- **Data persistence**: Locks saved to `world/data/private-chests.dat`
+- **Data persistence**: Locks saved to `world/data/private_chests.dat`
+- **Dimension-aware**: Locks are tracked per dimension; matching coordinates in another dimension are unrelated
 - **Performance**: Packet-level interception and caching
+
+## Known Limitations
+
+- **Access is granted by username, not UUID.** If a listed player changes their Minecraft name and someone else later claims the old name, that person would match the sign entry. Review allowed-user lists after name changes.
+- **Underscores match spaces.** To support Bedrock names (which may contain spaces), `_` and ` ` are treated as equal when matching sign entries, so `John_Doe` (Java) and `John Doe` (Bedrock) cannot be distinguished.
 
 ## Known Issues
 
