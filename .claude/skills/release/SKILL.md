@@ -70,10 +70,36 @@ git push origin vX.Y.Z
   (one per Minecraft version, no `-sources` jars), tag marked Latest.
 - Link the release to the user.
 
-## 6. Post-release
+## 6. Modrinth publication
 
-- This mod publishes to GitHub releases only (no Modrinth/CurseForge presence
-  yet — if that changes, add the publication steps here).
+The mod is on Modrinth as `private-chests` (Fabric, server-only). The user
+uploads manually; prepare everything for them.
+
+**Check the real per-line history first** — never assume:
+`https://api.modrinth.com/v2/project/private-chests/version` lists what
+actually shipped per Minecraft line. Each jar's changelog covers everything
+since the **last version published for that line** (lines skip releases:
+e.g. v1.4.0 followed 1.3.0 on 26.2, but 1.2.0 on 26.1.x and 1.0.1 on
+1.21.11 — those jars bundle the skipped versions' features too).
+
+**Version entries** — one per jar, VERY concise notes:
+
+- Version number `X.Y.Z+<mc>`, channel **Release**, environment
+  **server-only**, **Fabric API** as required dependency.
+- Game versions: the whole line the jar's `minecraft` range covers
+  (`~26.1` → 26.1, 26.1.1, 26.1.2, ...), matching prior entries for
+  that line.
+- Derive notes from the CHANGELOG but do NOT paste it verbatim: keep only
+  lines relevant to that jar's line, strip issue references, state only
+  that jar's Java requirement, and frame per the line's history
+  ("First update for <line> since <version> — ..." when releases were
+  skipped).
+- Jars come from the GitHub release assets, never a local build.
+
+Show the per-jar notes and metadata to the user before they upload.
+
+## 7. Post-release
+
 - Closed issues referenced in the notes get a comment only if the fix needs
   user action (e.g. new config); otherwise the auto-close from the PR suffices.
 - The next feature commit bumps `mod_version` (this repo does not use -SNAPSHOT
