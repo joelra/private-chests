@@ -1,28 +1,34 @@
 # Changelog
 
-## 1.4.0
+## 1.4.0 — 2026-08-17
+
+This release closes an exploit that let players remove other players' locks, fixes several protection gaps, and — for the first time — ships jars for Minecraft 1.21.11 and 26.1.x alongside 26.2.
 
 ### Security fixes
 
-- **Locks are now dimension-aware.** Previously a chest at matching coordinates in another dimension resolved to the same lock, and interacting with it could delete the real lock entirely. Existing saves migrate automatically (pre-existing locks are treated as overworld).
-- Placement restrictions (signs on locked containers, chests next to locked chests) can no longer be bypassed from the off-hand.
-- `adminPermissionLevel` is now validated to 1-4; a value of 0 no longer silently makes every player an admin.
-- A malformed or empty config file no longer crashes the server on startup.
+- **Closed an exploit that could remove someone else's lock from another dimension.** A chest placed at the same coordinates in the Nether or End previously shared the lock with the overworld chest, and interacting with it could delete the real lock entirely. Locks now only apply in their own dimension; existing locks migrate automatically.
+- Sneak-placing from the off-hand no longer bypasses the rules against placing signs on, or chests next to, someone else's locked container.
+- Setting `adminPermissionLevel` to 0 no longer makes every player an admin. The valid range is now 1-4; out-of-range values reset to the default of 3 on startup.
+- A broken or empty config file no longer crashes the server on startup — defaults are used instead.
 
 ### Fixes
 
-- Breaking a protection sign (as owner or admin) or a banned owner's container now removes the lock record instead of leaving phantom explosion/fire protection behind.
-- Placing a second chest to extend a locked chest now correctly extends the lock to cover both halves.
+- Breaking your own protection sign, or a banned player's container, now fully removes the lock. Previously a leftover record kept silently protecting that spot from explosions.
+- Extending a locked single chest into a double chest now correctly extends the protection to the new half.
 
-### Features
+### Changes
 
-- Droppers can no longer insert items into locked containers.
-- One release now ships jars for Minecraft 1.21.11, 26.1.x, and 26.2 — pick the jar matching your server version (`+1.21.11` needs Java 21+, `+26.1.1`/`+26.2` need Java 25+).
+- Locked containers can no longer be filled through droppers (hoppers and hopper minecarts were already blocked).
 
-### Internal
+### Compatibility notes
 
-- Added 33 unit tests and 25 in-world game tests covering all container types, access control, destruction protection, placement restrictions, and automation blocking; CI runs both suites for every supported Minecraft version.
-- Multi-version builds via Stonecutter from a single codebase.
+- Three jars, one per Minecraft version — install the one matching your server:
+  - `private-chests-1.4.0+1.21.11.jar` — Minecraft 1.21.11, Java 21+
+  - `private-chests-1.4.0+26.1.1.jar` — Minecraft 26.1.x, Java 25+
+  - `private-chests-1.4.0+26.2.jar` — Minecraft 26.2, Java 25+
+- Requires Fabric Loader 0.19.3+ and Fabric API. Server-side only — players do not need to install anything.
+- Existing configs and lock data work unchanged. Locks created before 1.4.0 are treated as overworld locks (the only place they could have been created).
+- If your config intentionally set `adminPermissionLevel: 0`, note it will be reset to 3 — every player having admin bypass is no longer supported.
 
 ## 1.3.0
 
