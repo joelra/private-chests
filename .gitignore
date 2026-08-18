@@ -118,7 +118,9 @@ fabric.properties
 
 ### Project Specific ###
 # Claude Code settings (user-specific)
-.claude/
+.claude/*
+# (.claude/skills is tracked — shared, repo-specific agent skills)
+!.claude/skills/
 
 # Development/internal documentation
 PRIVATE_CHESTS_SPEC.md
