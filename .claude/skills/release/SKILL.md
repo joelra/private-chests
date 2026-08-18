@@ -75,28 +75,22 @@ git push origin vX.Y.Z
 The mod is on Modrinth as `private-chests` (Fabric, server-only). The user
 uploads manually; prepare everything for them.
 
-**Check the real per-line history first** — never assume:
-`https://api.modrinth.com/v2/project/private-chests/version` lists what
-actually shipped per Minecraft line. Each jar's changelog covers everything
-since the **last version published for that line** (lines skip releases:
-e.g. v1.4.0 followed 1.3.0 on 26.2, but 1.2.0 on 26.1.x and 1.0.1 on
-1.21.11 — those jars bundle the skipped versions' features too).
-
 **Version entries** — one per jar, VERY concise notes:
 
 - Version number `X.Y.Z+<mc>`, channel **Release**, environment
   **server-only**, **Fabric API** as required dependency.
 - Game versions: the whole line the jar's `minecraft` range covers
   (`~26.1` → 26.1, 26.1.1, 26.1.2, ...), matching prior entries for
-  that line.
-- Derive notes from the CHANGELOG but do NOT paste it verbatim: keep only
-  lines relevant to that jar's line, strip issue references, state only
-  that jar's Java requirement, and frame per the line's history
-  ("First update for <line> since <version> — ..." when releases were
-  skipped).
+  that line (check `https://api.modrinth.com/v2/project/private-chests/version`).
+- Notes are **just what this release introduces** — the same short text on
+  every jar, condensed from the CHANGELOG entry (a few bullets, no
+  Compatibility block). Do NOT summarize skipped versions per line; every
+  Modrinth entry mirrors its GitHub release notes. The only per-jar
+  difference is the Java requirement line (21+ for `+1.21.11`, 25+ for 26.x).
+- Strip issue references like `(#5)` — they don't link on Modrinth.
 - Jars come from the GitHub release assets, never a local build.
 
-Show the per-jar notes and metadata to the user before they upload.
+Show the notes and metadata to the user before they upload.
 
 ## 7. Post-release
 
