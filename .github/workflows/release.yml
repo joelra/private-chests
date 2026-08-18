@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: Set up JDKs
+        # Java 21 for 1.21.11, Java 25 for 26.x. Installing both lets the Gradle
+        # toolchain pick the right one per Minecraft version without downloading.
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Verify sources were committed with the VCS version active
+        # Stonecutter rewrites shared sources when switching versions; commits must
+        # be made with the vcsVersion (26.2) active. Resetting must be a no-op.
+        run: |
+          ./gradlew "Reset active project" --no-daemon
+          git diff --exit-code
+
+      - name: Verify tag matches mod_version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          CONFIGURED=$(grep -oP '^mod_version=\K.*' gradle.properties)
+          if [ "$VERSION" != "$CONFIGURED" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match mod_version=$CONFIGURED in gradle.properties" >&2
+            exit 1
+          fi
+
+      - name: Build all versions
+        run: ./gradlew build --stacktrace --no-daemon
+
+      - name: Run game tests for all versions
+        run: ./gradlew runGametest --stacktrace --no-daemon
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '/^## /{p=0} index($0, "## " ver) == 1 {p=1; next} p' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "No CHANGELOG.md section found for version $VERSION" >&2
+            exit 1
+          fi
+          cat release-notes.md
+
+      - name: Collect runtime jars
+        run: |
+          mkdir dist
+          find versions -path "*/build/libs/*.jar" ! -name "*-sources.jar" -exec cp {} dist/ \;
+          ls -la dist/
+          test "$(ls dist/*.jar | wc -l)" -eq 3
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.jar \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            --verify-tag

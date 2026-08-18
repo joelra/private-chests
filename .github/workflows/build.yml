@@ -6,27 +6,53 @@
 name: build
 on: [pull_request, push]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
       - name: checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
       - name: validate gradle wrapper
-        uses: gradle/actions/wrapper-validation@v4
-      - name: setup jdk
-        uses: actions/setup-java@v4
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: set up jdks
+        # Java 21 for 1.21.11, Java 25 for 26.x. Installing both lets the Gradle
+        # toolchain pick the right one per Minecraft version without downloading.
+        uses: actions/setup-java@v5
         with:
-          java-version: '25'
-          distribution: 'microsoft'
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - name: set up gradle
+        uses: gradle/actions/setup-gradle@v6
+
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
+
+      - name: verify sources were committed with the VCS version active
+        # Stonecutter rewrites shared sources when switching versions; commits must
+        # be made with the vcsVersion (26.2) active. Resetting must be a no-op.
+        run: |
+          ./gradlew "Reset active project" --no-daemon
+          git diff --exit-code
+
       - name: build all versions
-        run: ./gradlew build
+        run: ./gradlew build --stacktrace --no-daemon
+
       - name: run game tests for all versions
-        run: ./gradlew runGametest
+        run: ./gradlew runGametest --stacktrace --no-daemon
+
       - name: capture build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: Artifacts
-          path: versions/*/build/libs/
+          name: private-chests-build-${{ github.run_number }}
+          path: |
+            versions/*/build/libs/*.jar
+            !versions/*/build/libs/*-sources.jar
+          if-no-files-found: error

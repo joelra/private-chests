@@ -215,7 +215,17 @@ The project uses [Stonecutter](https://stonecutter.kikugie.dev/) to build for mu
 3. Build every version: `./gradlew build` — jars land in `versions/<version>/build/libs/`
 4. Run tests: `./gradlew test` (unit) and `./gradlew runGametest` (in-world), or per version, e.g. `./gradlew :26.2:runGametest`
 5. Start a dev server for the active version: `./gradlew :26.2:runServer`
-6. Switch the active version for IDE editing with the `stonecutterSwitchTo...` Gradle tasks (run `Reset active version` before committing)
+6. Switch the active version for IDE editing with the `stonecutterSwitchTo...` Gradle tasks (run `Reset active project` before committing)
+
+### Releasing
+
+Releases are published automatically by the [Release workflow](.github/workflows/release.yml) when a `v*` tag is pushed:
+
+1. Bump `mod_version` in `gradle.properties`
+2. Add a matching `## <version>` section to `CHANGELOG.md`
+3. Commit, then tag and push: `git tag v<version> && git push origin v<version>`
+
+CI rebuilds and game-tests every Minecraft version, then creates a GitHub release with that changelog section as the notes and all three runtime jars attached. The workflow fails if the tag doesn't match `mod_version` or the changelog section is missing.
 
 ### Reporting Issues
 
