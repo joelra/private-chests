@@ -106,7 +106,11 @@ public class BreakProtectionGameTest {
         helper.succeed();
     }
 
+    //? if <26 {
+    /*@GameTest(maxTicks = 200)
+    *///?} else {
     @GameTest(maxTicks = 200, padding = 4)
+    //?}
     public void explosionSparesLockedChestAndSign(GameTestHelper helper) {
         BlockPos lockedChestRel = new BlockPos(1, 1, 3);
         BlockPos signRel = lockedChestRel.west();

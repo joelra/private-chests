@@ -3,7 +3,7 @@
 A server-side Minecraft mod for protecting chests and barrels using wall signs with `[private]` and `[public]` markers.
 
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](LICENSE)
-[![Minecraft](https://img.shields.io/badge/Minecraft-26.2-green.svg)](https://www.minecraft.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11%20%7C%2026.1%20%7C%2026.2-green.svg)](https://www.minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Mod%20Loader-Fabric-orange.svg)](https://fabricmc.net/)
 
 ## Features
@@ -27,10 +27,10 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
 ## Installation
 
 ### Requirements
-- Minecraft 26.2
+- Minecraft 1.21.11, 26.1.x, or 26.2 (use the jar matching your server version)
 - Fabric Loader 0.19.3+
 - Fabric API
-- Java 25+
+- Java 21+ for Minecraft 1.21.11, Java 25+ for 26.x
 
 ### Steps
 1. Download the latest release from [Releases](https://github.com/joelra/private-chests/releases)
@@ -208,10 +208,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ### Development Setup
 
+The project uses [Stonecutter](https://stonecutter.kikugie.dev/) to build for multiple Minecraft versions from one codebase. Supported targets live in `settings.gradle.kts`; per-version dependencies live in `versions/<version>/gradle.properties`.
+
 1. Clone the repository
 2. Open in IntelliJ IDEA or your preferred IDE
-3. Run `./gradlew genSources` to generate Minecraft sources
-4. Use the included run configurations for testing
+3. Build every version: `./gradlew build` — jars land in `versions/<version>/build/libs/`
+4. Run tests: `./gradlew test` (unit) and `./gradlew runGametest` (in-world), or per version, e.g. `./gradlew :26.2:runGametest`
+5. Start a dev server for the active version: `./gradlew :26.2:runServer`
+6. Switch the active version for IDE editing with the `stonecutterSwitchTo...` Gradle tasks (run `Reset active version` before committing)
 
 ### Reporting Issues
 

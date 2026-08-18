@@ -1,10 +1,19 @@
 plugins {
-	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	// fabric-loom handles the unobfuscated 26.x versions; fabric-loom-remap is
+	// its variant for obfuscated/intermediary versions up to 1.21.11.
+	id 'net.fabricmc.fabric-loom' version "${loom_version}" apply false
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}" apply false
 	id 'maven-publish'
 }
 
-version = project.mod_version
+// Each Stonecutter node builds this script with its own versions/*/gradle.properties
+def legacyMinecraft = project.minecraft_version.startsWith("1.")
+apply plugin: legacyMinecraft ? 'net.fabricmc.fabric-loom-remap' : 'net.fabricmc.fabric-loom'
+
+version = "${project.mod_version}+${stonecutter.current.version}"
 group = project.maven_group
+
+def javaVersion = Integer.parseInt(project.java_version)
 
 base {
 	archivesName = project.archives_base_name
@@ -40,12 +49,17 @@ loom {
 }
 
 dependencies {
-	// To change the versions see the gradle.properties file
+	// To change the versions see the versions/*/gradle.properties files
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
-	// Fabric API. This is technically optional, but you probably want it anyway.
-	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	if (legacyMinecraft) {
+		mappings loom.officialMojangMappings()
+		modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+		modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	} else {
+		implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+		implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	}
 
 	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
 }
@@ -59,14 +73,23 @@ test {
 
 processResources {
 	inputs.property "version", project.version
+	inputs.property "minecraft_range", project.minecraft_range
+	inputs.property "java_version", project.java_version
+	inputs.property "mixin_java_level", project.mixin_java_level
 
 	filesMatching("fabric.mod.json") {
-		expand "version": inputs.properties.version
+		expand "version": inputs.properties.version,
+			"minecraft_range": inputs.properties.minecraft_range,
+			"java_version": inputs.properties.java_version
+	}
+
+	filesMatching("private-chests.mixins.json") {
+		expand "mixin_java_level": inputs.properties.mixin_java_level
 	}
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 25
+	it.options.release = javaVersion
 }
 
 java {
@@ -75,17 +98,17 @@ java {
 	// If you remove this line, sources will not be generated.
 	withSourcesJar()
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(25)
+		languageVersion = JavaLanguageVersion.of(javaVersion)
 	}
 
-	sourceCompatibility = JavaVersion.VERSION_25
-	targetCompatibility = JavaVersion.VERSION_25
+	sourceCompatibility = JavaVersion.toVersion(javaVersion)
+	targetCompatibility = JavaVersion.toVersion(javaVersion)
 }
 
 jar {
 	inputs.property "archivesName", project.base.archivesName
 
-	from("LICENSE") {
+	from(rootProject.file("LICENSE")) {
 		rename { "${it}_${inputs.properties.archivesName}"}
 	}
 }

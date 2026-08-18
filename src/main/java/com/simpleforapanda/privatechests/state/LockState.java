@@ -15,7 +15,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
-import net.minecraft.world.level.storage.SavedDataStorage;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -80,14 +79,21 @@ public class LockState extends SavedData {
     };
 
     private static final SavedDataType<LockState> TYPE = new SavedDataType<>(
+        // The plain-string id matches what 1.21.11 releases already saved to disk
+        //? if <26 {
+        /*FILE_NAME,
+        *///?} else {
         Identifier.fromNamespaceAndPath(PrivateChests.MOD_ID, FILE_NAME),
+        //?}
         LockState::new,
         CODEC,
         null
     );
 
     public static LockState get(MinecraftServer server) {
-        SavedDataStorage storage = server.overworld().getDataStorage();
+        // var: the storage class is DimensionDataStorage on 1.21.11 and
+        // SavedDataStorage on 26.x; the API is otherwise identical.
+        var storage = server.overworld().getDataStorage();
         return storage.computeIfAbsent(TYPE);
     }
 

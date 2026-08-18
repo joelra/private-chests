@@ -21,12 +21,12 @@ jobs:
           distribution: 'microsoft'
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
-      - name: build
+      - name: build all versions
         run: ./gradlew build
-      - name: run game tests
+      - name: run game tests for all versions
         run: ./gradlew runGametest
       - name: capture build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Artifacts
-          path: build/libs/
+          path: versions/*/build/libs/
