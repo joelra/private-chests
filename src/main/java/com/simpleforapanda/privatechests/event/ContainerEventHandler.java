@@ -19,10 +19,10 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.SignItem;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.SignBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 
@@ -71,7 +71,8 @@ public class ContainerEventHandler {
             return InteractionResult.PASS;
         }
 
-        if (heldItem.getItem() instanceof SignItem) {
+        // Checks the placed block rather than SignItem, which 26.3 removed
+        if (heldItem.getItem() instanceof BlockItem blockItem && blockItem.getBlock() instanceof SignBlock) {
             Optional<LockRecord> lockOpt = lockState.getLock(level, ContainerUtils.getContainerGroup(level, clickedPos));
             if (lockOpt.isPresent() && !canManageLock(serverPlayer, lockOpt.get())) {
                 serverPlayer.sendSystemMessage(Component.literal(

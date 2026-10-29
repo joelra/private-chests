@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
+import com.simpleforapanda.privatechests.util.SignUtils;
 import net.minecraft.server.network.FilteredText;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 
@@ -47,6 +48,6 @@ public enum AccessMode {
     }
 
     public static Optional<AccessMode> fromSign(SignBlockEntity signEntity, boolean isFront) {
-        return fromLine(signEntity.getText(isFront).getMessage(0, false).getString());
+        return fromLine(SignUtils.getLine(signEntity, isFront, 0));
     }
 }

@@ -23,7 +23,17 @@ public abstract class SignEditMixin {
      * Only runs when the editing player is a ServerPlayer (i.e. on the server).
      */
     @Inject(method = "updateSignText", at = @At("HEAD"), cancellable = true)
-    private void onSignUpdate(Player player, boolean isFrontText, List<FilteredText> filteredLines, CallbackInfo ci) {
+    //? if >=26.3 {
+    private void onSignUpdate(Player player, net.minecraft.world.level.block.entity.SignTextSlot slot, List<FilteredText> filteredLines, CallbackInfo ci) {
+        handleSignUpdate(player, slot == net.minecraft.world.level.block.entity.SignTextSlot.FRONT, filteredLines, ci);
+    }
+    //?} else {
+    /*private void onSignUpdate(Player player, boolean isFrontText, List<FilteredText> filteredLines, CallbackInfo ci) {
+        handleSignUpdate(player, isFrontText, filteredLines, ci);
+    }
+    *///?}
+
+    private void handleSignUpdate(Player player, boolean isFrontText, List<FilteredText> filteredLines, CallbackInfo ci) {
         if (!(player instanceof ServerPlayer serverPlayer)) {
             return;
         }

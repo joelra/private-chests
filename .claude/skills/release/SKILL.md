@@ -8,7 +8,7 @@ description: Cut a Private Chests release - finalize the CHANGELOG in end-user v
 Releases are driven by tags: pushing `vX.Y.Z` triggers `.github/workflows/release.yml`,
 which builds and game-tests every Minecraft version in clean CI, extracts that
 version's CHANGELOG section as the release notes, and publishes a GitHub release
-with all three runtime jars (`private-chests-X.Y.Z+{1.21.11,26.1.1,26.2}.jar`).
+with all four runtime jars (`private-chests-X.Y.Z+{1.21.11,26.1.1,26.2,26.3}.jar`).
 Your job is everything the workflow can't judge: the changelog wording, preflight
 sanity, and the tag itself.
 
@@ -17,7 +17,7 @@ sanity, and the tag itself.
 - On `main`, working tree clean, synced with `origin/main` (`git fetch` + compare).
 - CI green on the `main` HEAD commit (`gh run list --branch main --limit 1`).
 - Stonecutter state canonical: `./gradlew "Reset active project"` then `git diff --exit-code`
-  (the VCS/active version is 26.2).
+  (the VCS/active version is 26.3).
 - `mod_version` in `gradle.properties` equals the version being released
   (the release workflow hard-fails on mismatch). If it needs bumping, that bump is
   part of the release commit.
@@ -34,7 +34,7 @@ players**, not contributors. Rules:
   "added DropperBlockMixin".
 - Name issue numbers for fixes (`#5`, `#6`) — they link automatically on GitHub.
 - Include a **Compatibility notes** block: Minecraft version per jar
-  (`+1.21.11` needs Java 21+, `+26.1.1` and `+26.2` need Java 25+), and
+  (`+1.21.11` needs Java 21+, `+26.1.1`, `+26.2` and `+26.3` need Java 25+), and
   config/data migration impact (usually "existing configs and locks work
   unchanged"; call out anything like the automatic dimension migration of
   pre-1.4.0 lock data).
@@ -66,7 +66,7 @@ git push origin vX.Y.Z
 ## 5. Watch and verify
 
 - Watch the Release workflow run (`gh run watch`).
-- When it finishes, verify the release page: correct notes, exactly three jars
+- When it finishes, verify the release page: correct notes, exactly four jars
   (one per Minecraft version, no `-sources` jars), tag marked Latest.
 - Link the release to the user.
 

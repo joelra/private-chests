@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0 (unreleased)
+
+- Added support for Minecraft 26.3 (`private-chests-1.5.0+26.3.jar`, Java 25+). The 1.21.11, 26.1.x, and 26.2 jars continue to ship alongside it.
+
 ## 1.4.0 — 2026-08-17
 
 This release closes an exploit that let players remove other players' locks, fixes several protection gaps, and — for the first time — ships jars for Minecraft 1.21.11 and 26.1.x alongside 26.2.
