@@ -7,6 +7,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.WallSignBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.block.entity.SignText;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
@@ -20,6 +21,22 @@ import java.util.Set;
 public class SignUtils {
     public static boolean isWallSign(BlockState state) {
         return state.getBlock() instanceof WallSignBlock;
+    }
+
+    /**
+     * Reads one unfiltered line from one side of a sign. The mod tracks sides as
+     * a front/back boolean; 26.3 replaced that boolean in Minecraft's API with
+     * the SignTextSlot enum and dropped SignText.getMessage(int, boolean).
+     */
+    public static String getLine(SignBlockEntity signEntity, boolean isFront, int line) {
+        //? if >=26.3 {
+        SignText text = signEntity.getText(isFront
+            ? net.minecraft.world.level.block.entity.SignTextSlot.FRONT
+            : net.minecraft.world.level.block.entity.SignTextSlot.BACK);
+        return text.getMessages(false).get(line).getString();
+        //?} else {
+        /*return signEntity.getText(isFront).getMessage(line, false).getString();
+        *///?}
     }
 
     public static boolean isProtectionSign(Level level, BlockPos signPos) {
@@ -66,7 +83,7 @@ public class SignUtils {
         Set<String> users = new HashSet<>();
         int startLine = containsProtectionMarker(signEntity, isFront) ? 1 : 0;
         for (int i = startLine; i < 4; i++) {
-            extractUsernamesFromLine(signEntity.getText(isFront).getMessage(i, false).getString().trim(), users);
+            extractUsernamesFromLine(getLine(signEntity, isFront, i).trim(), users);
         }
         return users;
     }

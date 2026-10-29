@@ -3,7 +3,7 @@
 A server-side Minecraft mod for protecting chests and barrels using wall signs with `[private]` and `[public]` markers.
 
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](LICENSE)
-[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11%20%7C%2026.1%20%7C%2026.2-green.svg)](https://www.minecraft.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11%20%7C%2026.1%20%7C%2026.2%20%7C%2026.3-green.svg)](https://www.minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Mod%20Loader-Fabric-orange.svg)](https://fabricmc.net/)
 
 ## Features
@@ -27,7 +27,7 @@ A server-side Minecraft mod for protecting chests and barrels using wall signs w
 ## Installation
 
 ### Requirements
-- Minecraft 1.21.11, 26.1.x, or 26.2 (use the jar matching your server version)
+- Minecraft 1.21.11, 26.1.x, 26.2, or 26.3 (use the jar matching your server version)
 - Fabric Loader 0.19.3+
 - Fabric API
 - Java 21+ for Minecraft 1.21.11, Java 25+ for 26.x
@@ -213,8 +213,8 @@ The project uses [Stonecutter](https://stonecutter.kikugie.dev/) to build for mu
 1. Clone the repository
 2. Open in IntelliJ IDEA or your preferred IDE
 3. Build every version: `./gradlew build` — jars land in `versions/<version>/build/libs/`
-4. Run tests: `./gradlew test` (unit) and `./gradlew runGametest` (in-world), or per version, e.g. `./gradlew :26.2:runGametest`
-5. Start a dev server for the active version: `./gradlew :26.2:runServer`
+4. Run tests: `./gradlew test` (unit) and `./gradlew runGametest` (in-world), or per version, e.g. `./gradlew :26.3:runGametest`
+5. Start a dev server for the active version: `./gradlew :26.3:runServer`
 6. Switch the active version for IDE editing with the `stonecutterSwitchTo...` Gradle tasks (run `Reset active project` before committing)
 
 ### Releasing
@@ -225,7 +225,7 @@ Releases are published automatically by the [Release workflow](.github/workflows
 2. Add a matching `## <version>` section to `CHANGELOG.md`
 3. Commit, then tag and push: `git tag v<version> && git push origin v<version>`
 
-CI rebuilds and game-tests every Minecraft version, then creates a GitHub release with that changelog section as the notes and all three runtime jars attached. The workflow fails if the tag doesn't match `mod_version` or the changelog section is missing.
+CI rebuilds and game-tests every Minecraft version, then creates a GitHub release with that changelog section as the notes and every runtime jar (one per Minecraft version) attached. The workflow fails if the tag doesn't match `mod_version` or the changelog section is missing.
 
 ### Reporting Issues
 

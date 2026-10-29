@@ -37,7 +37,7 @@ jobs:
 
       - name: Verify sources were committed with the VCS version active
         # Stonecutter rewrites shared sources when switching versions; commits must
-        # be made with the vcsVersion (26.2) active. Resetting must be a no-op.
+        # be made with the vcsVersion (26.3) active. Resetting must be a no-op.
         run: |
           ./gradlew "Reset active project" --no-daemon
           git diff --exit-code
@@ -72,7 +72,7 @@ jobs:
           mkdir dist
           find versions -path "*/build/libs/*.jar" ! -name "*-sources.jar" -exec cp {} dist/ \;
           ls -la dist/
-          test "$(ls dist/*.jar | wc -l)" -eq 3
+          test "$(ls dist/*.jar | wc -l)" -eq 4
 
       - name: Create GitHub release
         env:

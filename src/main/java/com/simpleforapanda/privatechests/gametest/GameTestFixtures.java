@@ -45,7 +45,11 @@ final class GameTestFixtures {
 
         SignBlockEntity sign = helper.getBlockEntity(signRel, SignBlockEntity.class);
         sign.setAllowedPlayerEditor(editor.getUUID());
-        sign.updateSignText(editor, true, text);
+        //? if >=26.3 {
+        sign.updateSignText(editor, net.minecraft.world.level.block.entity.SignTextSlot.FRONT, text);
+        //?} else {
+        /*sign.updateSignText(editor, true, text);
+        *///?}
     }
 
     /**
