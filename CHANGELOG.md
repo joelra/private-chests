@@ -1,8 +1,20 @@
 # Changelog
 
-## 1.5.0 (unreleased)
+## 1.5.0 — 2026-10-29
 
-- Added support for Minecraft 26.3 (`private-chests-1.5.0+26.3.jar`, Java 25+). The 1.21.11, 26.1.x, and 26.2 jars continue to ship alongside it.
+- Added support for Minecraft 26.3.
+
+Nothing else changed: the 1.21.11, 26.1.x, and 26.2 jars behave exactly like 1.4.0, so servers on those versions only need to update when they move to 26.3.
+
+### Compatibility notes
+
+- Four jars, one per Minecraft version — install the one matching your server:
+  - `private-chests-1.5.0+1.21.11.jar` — Minecraft 1.21.11, Java 21+
+  - `private-chests-1.5.0+26.1.1.jar` — Minecraft 26.1.x, Java 25+
+  - `private-chests-1.5.0+26.2.jar` — Minecraft 26.2, Java 25+
+  - `private-chests-1.5.0+26.3.jar` — Minecraft 26.3, Java 25+
+- Requires Fabric Loader 0.19.3+ and Fabric API. Server-side only — players do not need to install anything.
+- Existing configs and locks work unchanged; the lock save format is the same on every jar.
 
 ## 1.4.0 — 2026-08-17
 
